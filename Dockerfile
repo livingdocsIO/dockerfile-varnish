@@ -12,4 +12,4 @@ EXPOSE $VARNISH_PORT
 COPY entrypoint.sh /entrypoint.sh
 COPY bluewin.vcl $VARNISH_CONFIG
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/entrypoint.sh"]
