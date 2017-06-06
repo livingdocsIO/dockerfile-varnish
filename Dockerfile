@@ -13,4 +13,4 @@ COPY default.vcl /etc/varnish/default.vcl
 
 VOLUME ["/var/lib/varnish", "/etc/varnish"]
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/entrypoint.sh"]
