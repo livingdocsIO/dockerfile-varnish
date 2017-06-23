@@ -9,7 +9,7 @@ ENV VARNISH_PORT 80
 EXPOSE $VARNISH_PORT
 
 COPY entrypoint.sh /entrypoint.sh
-COPY default.vcl $VARNISH_CONFIG
+COPY bluewin.vcl $VARNISH_CONFIG
 
 VOLUME ["/var/lib/varnish", "/etc/varnish"]
 
