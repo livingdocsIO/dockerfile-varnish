@@ -11,6 +11,4 @@ EXPOSE $VARNISH_PORT
 COPY entrypoint.sh /entrypoint.sh
 COPY bluewin.vcl $VARNISH_CONFIG
 
-VOLUME ["/var/lib/varnish", "/etc/varnish"]
-
 ENTRYPOINT ["/entrypoint.sh"]
