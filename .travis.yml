@@ -4,7 +4,7 @@ services:
   - docker
 
 env:
-  - VERSION=4.1.3-r0 NAME=varnish413 TAGS="livingdocs/bluewin-varnish:4.1.3 livingdocs/bluewin-varnish:latest
+  - VERSION=4.1.3-r0 NAME=varnish413 TAGS="livingdocs/bluewin-varnish:4.1.3 livingdocs/bluewin-varnish:latest"
 
 before_install:
   - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
