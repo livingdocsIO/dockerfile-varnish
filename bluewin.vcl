@@ -4,8 +4,8 @@ import std;
 import directors;
 
 backend delivery1 { # Define a backend
-  .host = "${BACKEND_HOST}";    # IP or Hostname of delivery server
-  .port = "${BACKEND_PORT}";
+  .host = "{{BACKEND_HOST}}";    # IP or Hostname of delivery server
+  .port = "{{BACKEND_PORT}}";
   # .max_connections = 300;
 
   # optional: health probe to mark this backend as healthy or sick
