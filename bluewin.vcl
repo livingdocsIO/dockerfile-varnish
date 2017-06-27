@@ -26,6 +26,11 @@ backend delivery1 { # Define a backend
   .between_bytes_timeout  = 2s;     # How long to wait between bytes received from our backend?
 }
 
+# Sport results custom pages source
+backend sportdaten {
+  .host = "sportdaten.bluewin.ch";
+}
+
 # allowed to purge
 acl purge {
   "localhost";
@@ -48,7 +53,12 @@ sub vcl_recv {
   # Its purpose is to decide whether or not to serve the request, how to do it,
   # and, if applicable, which backend to use. Also used to modify the request.
 
-  set req.backend_hint = vdir.backend(); # send all traffic to the vdir director
+  if (req.http.host == "sportdaten.bluewin.ch") {
+    set req.backend_hint = sportdaten;
+  }
+  else {
+    set req.backend_hint = vdir.backend(); # send all traffic to the vdir director
+  }
 
   # Normalize the header, remove the port (in case you're testing this on various TCP ports)
   set req.http.Host = regsub(req.http.Host, ":[0-9]+", "");
@@ -253,6 +263,11 @@ sub vcl_backend_response {
   # Pause ESI request and remove Surrogate-Control header
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     unset beresp.http.Surrogate-Control;
+    set beresp.do_esi = true;
+  }
+
+  # Enable ESI for sport results custom pages
+  if (bereq.url ~ "/(de|fr|it)/sport/(resultate|resultats|risultati)?.*.html") {
     set beresp.do_esi = true;
   }
 
