@@ -96,6 +96,13 @@ sub vcl_recv {
     return (pass);
   }
 
+  if (req.http.User-Agent == "bluewin-app") {
+    # It has the bluewin mobile app UA
+    set req.http.X-IsMobileApp = "true";
+  } else {
+    set req.http.X-IsMobileApp = "false";
+  }
+
   # Some generic URL cleanup, useful for all templates that follow
   # First remove the Google Analytics added parameters, useless for our backend
   if (req.url ~ "(\?|&)(utm_source|utm_medium|utm_campaign|utm_content|gclid|cx|ie|cof|siteurl)=") {
@@ -200,11 +207,15 @@ sub vcl_pass {
   # return (pass);
 }
 
-# The data on which the hashing will take place
+# Called after vcl_recv to create a hash value for the request. This is used
+# as a key to look up the object in Varnish.
+# These hash subs are executed in order, they should not return anything
+# and the hashed data will later on get concatenated by the default vcl_hash.
 sub vcl_hash {
-  # Called after vcl_recv to create a hash value for the request. This is used
-  # as a key to look up the object in Varnish.
+  hash_data(req.http.X-IsMobileApp);
+}
 
+sub vcl_hash {
   hash_data(req.url);
 
   if (req.http.host) {
