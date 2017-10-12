@@ -25,6 +25,9 @@ acl purge {
 }
 
 sub vcl_recv {
+  # Normalize the header, remove the port (in case you're testing this on various TCP ports)
+  set req.http.Host = regsub(req.http.Host, ":[0-9]+", "");
+
   # Called at the beginning of a request, after the complete request has been
   # received and parsed.
   # Its purpose is to decide whether or not to serve the request, how to do it,
@@ -36,9 +39,6 @@ sub vcl_recv {
   else {
     set req.backend_hint = delivery1;
   }
-
-  # Normalize the header, remove the port (in case you're testing this on various TCP ports)
-  set req.http.Host = regsub(req.http.Host, ":[0-9]+", "");
 
   # Remove the proxy header (see https://httpoxy.org/#mitigate-varnish)
   unset req.http.proxy;
