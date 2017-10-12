@@ -3,27 +3,13 @@ vcl 4.0;
 import std;
 import directors;
 
-backend delivery1 { # Define a backend
-  .host = "{{BACKEND_HOST}}";    # IP or Hostname of delivery server
+backend delivery1 {
+  .host = "{{BACKEND_HOST}}";
   .port = "{{BACKEND_PORT}}";
-  # .max_connections = 300;
 
-  # optional: health probe to mark this backend as healthy or sick
-  # this is a public API endpoint, most probably not accessible on delivery :(
-  # .probe = {
-  #   .url = "/api/v1/health";
-
-  #   .interval  = 5s; # check the health of this backend every 5 seconds
-  #   .timeout   = 1s; # timing out after 1 second.
-  #   # If 3 out of the last 5 polls succeeded the backend is considered healthy,
-  #   # otherwise it will be marked as sick
-  #   .threshold = 3;
-  #   .window    = 5;
-  # }
-
-  .first_byte_timeout     = 300s;   # How long to wait before we receive a first byte from our backend?
-  .connect_timeout        = 5s;     # How long to wait for a backend connection?
-  .between_bytes_timeout  = 2s;     # How long to wait between bytes received from our backend?
+  .first_byte_timeout     = 30s; # How long to wait before we receive a first byte from our backend?
+  .connect_timeout        = 5s;  # How long to wait for a backend connection?
+  .between_bytes_timeout  = 2s;  # How long to wait between bytes received from our backend?
 }
 
 # Sport results custom pages source
