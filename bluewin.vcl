@@ -134,34 +134,6 @@ sub vcl_hash {
   # }
 }
 
-sub vcl_hit {
-  # Called when a cache lookup is successful.
-
-  if (obj.ttl >= 0s) {
-    # A pure unadultered hit, deliver it
-    return (deliver);
-  }
-
-  # https://varnish-cache.org/docs/5.0/users-guide/vcl-grace.html
-  # When several clients are requesting the same page Varnish will send one
-  # request to the backend and place the others on hold while fetching one copy
-  # from the backend. In some products this is called request coalescing and
-  # Varnish does this automatically.
-  # If you are serving thousands of hits per second the queue of waiting
-  # requests can get huge. There are two potential problems - one is a
-  # thundering herd problem - suddenly releasing a thousand threads to serve
-  # content might send the load sky high. Secondly - nobody likes to wait. To
-  # deal with this we can instruct Varnish to keep the objects in cache beyond
-  # their TTL and to serve the waiting requests somewhat stale content.
-
-   if (obj.ttl + obj.grace > 0s) {
-     // Object is in grace, deliver it
-     // Automatically triggers a background fetch
-     return (deliver);
-   }
-   // fetch & deliver once we get the result
-  return (fetch);
-}
 
 sub vcl_miss {
   # Called after a cache lookup if the requested document was not found in the cache. Its purpose
