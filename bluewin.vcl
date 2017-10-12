@@ -122,9 +122,8 @@ sub vcl_hash {
 }
 
 # Handle the HTTP request coming from our backend
+# Called after the response headers has been successfully retrieved from the backend.
 sub vcl_backend_response {
-  # Called after the response headers has been successfully retrieved from the backend.
-
   # Pause ESI request and remove Surrogate-Control header
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     unset beresp.http.Surrogate-Control;
@@ -139,15 +138,14 @@ sub vcl_backend_response {
   # Enable cache for all static files
   # The same argument as the static caches from above: monitor your cache size, if you get data nuked out of it, consider giving up the static file cache.
   # Before you blindly enable this, have a read here: https://ma.ttias.be/stop-caching-static-files/
-  # if (bereq.url ~ "^[^?]*\.(7z|avi|bmp|bz2|css|csv|doc|docx|eot|flac|flv|gif|gz|ico|jpeg|jpg|js|less|mka|mkv|mov|mp3|mp4|mpeg|mpg|odt|otf|ogg|ogm|opus|pdf|png|ppt|pptx|rar|rtf|svg|svgz|swf|tar|tbz|tgz|ttf|txt|txz|wav|webm|webp|woff|woff2|xls|xlsx|xml|xz|zip)(\?.*)?$") {
-  #   unset beresp.http.set-cookie;
-  # }
+  if (bereq.url ~ "^[^?]*\.(7z|avi|bmp|bz2|css|csv|doc|docx|eot|flac|flv|gif|gz|ico|jpeg|jpg|js|less|mka|mkv|mov|mp3|mp4|mpeg|mpg|odt|otf|ogg|ogm|opus|pdf|png|ppt|pptx|rar|rtf|svg|svgz|swf|tar|tbz|tgz|ttf|txt|txz|wav|webm|webp|woff|woff2|xls|xlsx|xml|xz|zip)(\?.*)?$") {
+    unset beresp.http.Set-Cookie;
+  }
 
   # Large static files are delivered directly to the end-user without
   # waiting for Varnish to fully read the file first.
   # Varnish 4 fully supports Streaming, so use streaming here to avoid locking.
   if (bereq.url ~ "^[^?]*\.(7z|avi|bz2|flac|flv|gz|mka|mkv|mov|mp3|mp4|mpeg|mpg|ogg|ogm|opus|rar|tar|tgz|tbz|txz|wav|webm|xz|zip)(\?.*)?$") {
-    unset beresp.http.set-cookie;
     set beresp.do_stream = true;  # Check memory usage it'll grow in fetch_chunksize blocks (128k by default) if the backend doesn't send a Content-Length header, so only enable it for big objects
   }
 
@@ -221,27 +219,9 @@ sub vcl_purge {
 }
 
 sub vcl_synth {
-  if (resp.status == 720) {
-    # We use this special error status 720 to force redirects with 301 (permanent) redirects
-    # To use this, call the following from anywhere in vcl_recv: return (synth(720, "http://host/new.html"));
-    set resp.http.Location = resp.reason;
-    set resp.status = 301;
-    return (deliver);
-  } elseif (resp.status == 721) {
-    # And we use error status 721 to force redirects with a 302 (temporary) redirect
-    # To use this, call the following from anywhere in vcl_recv: return (synth(720, "http://host/new.html"));
-    set resp.http.Location = resp.reason;
-    set resp.status = 302;
-    return (deliver);
-  }
-
   return (deliver);
 }
 
-
 sub vcl_fini {
-  # Called when VCL is discarded only after all requests have exited the VCL.
-  # Typically used to clean up VMODs.
-
   return (ok);
 }
