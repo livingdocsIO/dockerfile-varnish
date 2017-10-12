@@ -128,11 +128,13 @@ sub vcl_backend_response {
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     unset beresp.http.Surrogate-Control;
     set beresp.do_esi = true;
+    set beresp.do_gzip = true;
   }
 
   # Enable ESI for sport results custom pages
   if (bereq.url ~ "/(de|fr|it)/sport/(resultate|resultats|risultati)?.*.html") {
     set beresp.do_esi = true;
+    set beresp.do_gzip = true;
   }
 
   # Enable cache for all static files
@@ -149,50 +151,46 @@ sub vcl_backend_response {
     set beresp.do_stream = true;  # Check memory usage it'll grow in fetch_chunksize blocks (128k by default) if the backend doesn't send a Content-Length header, so only enable it for big objects
   }
 
-  if (bereq.url ~ "(?i)\/[\s\S]*?-\d+\.html[?]?.*"){
-    # (?i) at the beginning makes the regex case insensitive
-    # it's an article: we matched foo/bar-<id>.html
-    set beresp.ttl = 4m;
-  } else {
-    set beresp.ttl = 2m;
+  # Directly pass 404 statuses, cache for 5s to throttle requests to a backend
+  if (beresp.status == 404) {
+    return (pass(5s));
   }
 
-  # Set 2min cache if unset for static files
-  if (beresp.ttl <= 0s || beresp.http.Set-Cookie || beresp.http.Vary == "*") {
-    # This is a fallback in case ttl is null !
-    # Don't rely on this! beresp.ttl will take one of the following value:
-    # * The s-maxage variable in the Cache-Control response header field
-    # * The max-age variable in the Cache-Control response header field
-    # * The Expires response header field
-    # so the backend should set one of these instead of falling back in here
-    set beresp.ttl = 120s;
-    set beresp.uncacheable = true;
-    return (deliver);
-  }
-
-  # Don't cache 50x responses
+  # Directly pass 50x responses, cache for 15s to throttle requests to a backend
   if (beresp.status == 500 || beresp.status == 502 || beresp.status == 503 || beresp.status == 504) {
-    return (abandon);
+    return (pass(15s));
+  }
+
+  # Set cache time of all cacheable requests that didn't configure a cache ttl
+  if (beresp.ttl <= 0s &&
+      beresp.http.Vary != "*" &&
+      beresp.http.Cache-Control !~ "no-cache|no-store|private" &&
+      !beresp.http.Set-Cookie &&
+      beresp.http.Surrogate-control !~ "no-store" &&
+      !beresp.http.Surrogate-Control
+      ) {
+      set beresp.ttl = 4m;
   }
 
   # Allow stale content, in case the backend goes down.
-  # make Varnish keep all objects for 6 hours beyond their TTL
-  set beresp.grace = 6h;
+  # make Varnish keep all objects for 24 hours beyond their TTL
+  if (beresp.ttl >= 0s) {
+    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace, 24h);
+  }
 
   return (deliver);
 }
 
-# The routine when we deliver the HTTP request to the user
-# Last chance to modify headers that are sent to the client
+# Called before a cached/fresh object is delivered to the client.
 sub vcl_deliver {
-  # Called before a cached object is delivered to the client.
+  # Add Cache Grace Info to Response (set in vcl_hit)
+  if (req.http.X-Cache-Grace) { set resp.http.X-Cache-Grace = req.http.X-Cache-Grace; }
+  else { set resp.http.X-Cache-Grace = "NONE"; }
+
 
   # Add debug header to see if it's a HIT/MISS and the number of hits, disable when not needed
-  if (obj.hits > 0) {
-    set resp.http.X-Cache = "HIT";
-  } else {
-    set resp.http.X-Cache = "MISS";
-  }
+  if (obj.hits > 0) { set resp.http.X-Cache = "HIT"; }
+  else { set resp.http.X-Cache = "MISS"; }
 
   # Please note that obj.hits behaviour changed in 4.0, now it counts per
   # objecthead, not per object and obj.hits may not be reset in some cases where
@@ -207,6 +205,20 @@ sub vcl_deliver {
   unset resp.http.X-Generator;
 
   return (deliver);
+}
+
+sub vcl_hit {
+  if (obj.ttl >= 0s) {
+    set req.http.X-Cache-Grace = "HIT";
+  } else if (obj.ttl + 10s > 0s) {
+    // Object is probably updating in the background
+    set req.http.X-Cache-Grace = "MISS";
+  } else {
+    // Backend is probably down
+    set req.http.X-Cache-Grace = "STALE";
+  }
+
+  return(deliver);
 }
 
 sub vcl_purge {
