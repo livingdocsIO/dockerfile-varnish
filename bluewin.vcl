@@ -109,15 +109,6 @@ sub vcl_recv {
     unset req.http.Cookie;
   }
 
-  if (req.http.Cache-Control ~ "(?i)no-cache") {
-    # http://varnish.projects.linpro.no/wiki/VCLExampleEnableForceRefresh
-    # Ignore requests via proxy caches and badly behaved crawlers
-    # like msnbot that send no-cache with every request.
-    if (! (req.http.Via || req.http.User-Agent ~ "(?i)bot" || req.http.X-Purge)) {
-      return (purge); # Couple this with restart in vcl_purge and X-Purge header to avoid loops
-    }
-  }
-
   # Large static files are delivered directly to the end-user without
   # waiting for Varnish to fully read the file first.
   # Varnish 4 fully supports Streaming, so set do_stream in vcl_backend_response()
