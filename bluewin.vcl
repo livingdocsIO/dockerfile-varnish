@@ -73,13 +73,6 @@ sub vcl_recv {
     return (pass);
   }
 
-  if (req.http.User-Agent == "bluewin-app") {
-    # It has the bluewin mobile app UA
-    set req.http.X-IsMobileApp = "true";
-  } else {
-    set req.http.X-IsMobileApp = "false";
-  }
-
   # Some generic URL cleanup, useful for all templates that follow
   # First remove the Google Analytics added parameters, useless for our backend
   if (req.url ~ "(\?|&)(utm_source|utm_medium|utm_campaign|utm_content|gclid|cx|ie|cof|siteurl)=") {
@@ -116,31 +109,16 @@ sub vcl_recv {
 # These hash subs are executed in order, they should not return anything
 # and the hashed data will later on get concatenated by the default vcl_hash.
 sub vcl_hash {
-  hash_data(req.http.X-IsMobileApp);
-}
+  # Cache based on hostname or ip
+  if (req.http.host) { hash_data(req.http.host); }
+  else { hash_data(server.ip); }
 
-sub vcl_hash {
+  # Cache based on user agent
+  if (req.http.User-Agent == "bluewin-app") { hash_data("ua-app"); }
+  else { hash_data("ua-default"); }
+
+  # Cache based on url
   hash_data(req.url);
-
-  if (req.http.host) {
-    hash_data(req.http.host);
-  } else {
-    hash_data(server.ip);
-  }
-
-  # hash cookies for requests that have them
-  # if (req.http.Cookie) {
-  #   hash_data(req.http.Cookie);
-  # }
-}
-
-
-sub vcl_miss {
-  # Called after a cache lookup if the requested document was not found in the cache. Its purpose
-  # is to decide whether or not to attempt to retrieve the document from the backend, and which
-  # backend to use.
-
-  return (fetch);
 }
 
 # Handle the HTTP request coming from our backend
