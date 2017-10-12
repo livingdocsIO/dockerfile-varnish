@@ -38,15 +38,6 @@ acl purge {
   "::1";
 }
 
-sub vcl_init {
-  # Called when VCL is loaded, before any requests pass through it.
-  # Typically used to initialize VMODs.
-
-  new vdir = directors.round_robin();
-  vdir.add_backend(delivery1);
-  # vdir.add_backend(delivery2);
-}
-
 sub vcl_recv {
   # Called at the beginning of a request, after the complete request has been
   # received and parsed.
@@ -57,7 +48,7 @@ sub vcl_recv {
     set req.backend_hint = sportdaten;
   }
   else {
-    set req.backend_hint = vdir.backend(); # send all traffic to the vdir director
+    set req.backend_hint = delivery1;
   }
 
   # Normalize the header, remove the port (in case you're testing this on various TCP ports)
