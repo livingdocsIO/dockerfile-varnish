@@ -102,15 +102,11 @@ sub vcl_recv {
   # Nuke all cookies
   unset req.http.Cookie;
 
+  # Strip Auth and then cache
+  unset req.http.Authorization;
 
   # Send Surrogate-Capability headers to announce ESI support to backend
   set req.http.Surrogate-Capability = "key=ESI/1.0";
-
-  if (req.http.Authorization) {
-    # Strip Auth and then cache
-    unset req.http.Authorization;
-    return (hash);
-  }
 
   return (hash);
 }
