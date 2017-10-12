@@ -111,41 +111,6 @@ sub vcl_recv {
   return (hash);
 }
 
-sub vcl_pipe {
-  # Called upon entering pipe mode.
-
-  # In this mode, the request is passed on to the backend, and any further data
-  # from both the client and backend is passed on unaltered until either end
-  # closes the connection. Basically, Varnish will degrade into a simple TCP
-  # proxy, shuffling bytes back and forth. For a connection in pipe mode, no
-  # other VCL subroutine will ever get called after vcl_pipe.
-
-  # Note that only the first request to the backend will have
-  # X-Forwarded-For set.  If you use X-Forwarded-For and want to
-  # have it set for all requests, make sure to have:
-  # set bereq.http.connection = "close";
-  # here.  It is not set by default as it might break some broken web
-  # applications, like IIS with NTLM authentication.
-
-  # set bereq.http.Connection = "Close";
-
-  # Implementing websocket support (https://www.varnish-cache.org/docs/4.0/users-guide/vcl-example-websockets.html)
-  # if (req.http.upgrade) {
-  #   set bereq.http.upgrade = req.http.upgrade;
-  # }
-
-  return (pipe);
-}
-
-sub vcl_pass {
-  # Called upon entering pass mode. In this mode, the request is passed on to
-  # the backend, and the backend's response is passed on to the client, but is
-  # not entered into the cache. Subsequent requests submitted over the same
-  # client connection are handled normally.
-
-  # return (pass);
-}
-
 # Called after vcl_recv to create a hash value for the request. This is used
 # as a key to look up the object in Varnish.
 # These hash subs are executed in order, they should not return anything
