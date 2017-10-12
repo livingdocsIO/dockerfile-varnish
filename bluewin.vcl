@@ -43,9 +43,6 @@ sub vcl_recv {
   # Remove the proxy header (see https://httpoxy.org/#mitigate-varnish)
   unset req.http.proxy;
 
-  # Normalize the query arguments
-  set req.url = std.querysort(req.url);
-
   # Allow purging
   if (req.method == "PURGE") {
     # purge is an ACL defined above, we check the ip is in there
@@ -92,14 +89,14 @@ sub vcl_recv {
     set req.url = regsub(req.url, "\?$", "");
   }
 
+  # Normalize the query arguments
+  set req.url = std.querysort(req.url);
+
   # Nuke all cookies
   unset req.http.Cookie;
 
   # Strip Auth and then cache
   unset req.http.Authorization;
-
-  # Send Surrogate-Capability headers to announce ESI support to backend
-  set req.http.Surrogate-Capability = "key=ESI/1.0";
 
   return (hash);
 }
@@ -124,9 +121,37 @@ sub vcl_hash {
 # Handle the HTTP request coming from our backend
 # Called after the response headers has been successfully retrieved from the backend.
 sub vcl_backend_response {
-  # Pause ESI request and remove Surrogate-Control header
+  # We don't use any cookies, remove them to prevent security issues
+  unset beresp.http.Set-Cookie;
+
+  # Directly pass 404 statuses, cache for 5s to throttle requests to a backend
+  if (beresp.status == 404) {
+    return (pass(5s));
+  }
+
+  # Directly pass 50x responses, cache for 15s to throttle requests to a backend
+  if (beresp.status >= 500 && beresp.status < 600) {
+    return (pass(15s));
+  }
+
+  # Set cache time of all cacheable requests that didn't configure a cache ttl
+  if (
+    beresp.ttl <= 0s &&
+    beresp.http.Cache-Control !~ "no-cache|no-store|private" &&
+    beresp.http.Surrogate-Control !~ "no-cache|no-store|private"
+  ) {
+    set beresp.ttl = 4m;
+  }
+
+  # Allow stale content, in case the backend goes down.
+  # make Varnish keep all objects for 24 hours beyond their TTL
+  if (beresp.ttl >= 0s) {
+    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace, 24h);
+    unset beresp.http.X-Varnish-Grace;
+  }
+
+  # Enable ESI for pages that request it
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
-    unset beresp.http.Surrogate-Control;
     set beresp.do_esi = true;
     set beresp.do_gzip = true;
   }
@@ -137,47 +162,7 @@ sub vcl_backend_response {
     set beresp.do_gzip = true;
   }
 
-  # Enable cache for all static files
-  # The same argument as the static caches from above: monitor your cache size, if you get data nuked out of it, consider giving up the static file cache.
-  # Before you blindly enable this, have a read here: https://ma.ttias.be/stop-caching-static-files/
-  if (bereq.url ~ "^[^?]*\.(7z|avi|bmp|bz2|css|csv|doc|docx|eot|flac|flv|gif|gz|ico|jpeg|jpg|js|less|mka|mkv|mov|mp3|mp4|mpeg|mpg|odt|otf|ogg|ogm|opus|pdf|png|ppt|pptx|rar|rtf|svg|svgz|swf|tar|tbz|tgz|ttf|txt|txz|wav|webm|webp|woff|woff2|xls|xlsx|xml|xz|zip)(\?.*)?$") {
-    unset beresp.http.Set-Cookie;
-  }
-
-  # Large static files are delivered directly to the end-user without
-  # waiting for Varnish to fully read the file first.
-  # Varnish 4 fully supports Streaming, so use streaming here to avoid locking.
-  if (bereq.url ~ "^[^?]*\.(7z|avi|bz2|flac|flv|gz|mka|mkv|mov|mp3|mp4|mpeg|mpg|ogg|ogm|opus|rar|tar|tgz|tbz|txz|wav|webm|xz|zip)(\?.*)?$") {
-    set beresp.do_stream = true;  # Check memory usage it'll grow in fetch_chunksize blocks (128k by default) if the backend doesn't send a Content-Length header, so only enable it for big objects
-  }
-
-  # Directly pass 404 statuses, cache for 5s to throttle requests to a backend
-  if (beresp.status == 404) {
-    return (pass(5s));
-  }
-
-  # Directly pass 50x responses, cache for 15s to throttle requests to a backend
-  if (beresp.status == 500 || beresp.status == 502 || beresp.status == 503 || beresp.status == 504) {
-    return (pass(15s));
-  }
-
-  # Set cache time of all cacheable requests that didn't configure a cache ttl
-  if (beresp.ttl <= 0s &&
-      beresp.http.Vary != "*" &&
-      beresp.http.Cache-Control !~ "no-cache|no-store|private" &&
-      !beresp.http.Set-Cookie &&
-      beresp.http.Surrogate-control !~ "no-store" &&
-      !beresp.http.Surrogate-Control
-      ) {
-      set beresp.ttl = 4m;
-  }
-
-  # Allow stale content, in case the backend goes down.
-  # make Varnish keep all objects for 24 hours beyond their TTL
-  if (beresp.ttl >= 0s) {
-    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace, 24h);
-  }
-
+  unset beresp.http.Surrogate-Control;
   return (deliver);
 }
 
@@ -186,7 +171,6 @@ sub vcl_deliver {
   # Add Cache Grace Info to Response (set in vcl_hit)
   if (req.http.X-Cache-Grace) { set resp.http.X-Cache-Grace = req.http.X-Cache-Grace; }
   else { set resp.http.X-Cache-Grace = "NONE"; }
-
 
   # Add debug header to see if it's a HIT/MISS and the number of hits, disable when not needed
   if (obj.hits > 0) { set resp.http.X-Cache = "HIT"; }
