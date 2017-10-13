@@ -1,6 +1,6 @@
-FROM alpine:3.6
+FROM alpine:edge
 
-ARG VERSION
+ARG VERSION=5.1.3-r0
 RUN apk add --no-cache varnish=$VERSION && rm -rf /var/cache/apk/*
 
 ENV VARNISH_CONFIG '/etc/varnish/default.vcl'
@@ -12,4 +12,4 @@ EXPOSE $VARNISH_PORT
 COPY entrypoint.sh /entrypoint.sh
 COPY bluewin.vcl $VARNISH_CONFIG
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/entrypoint.sh"]
