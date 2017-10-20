@@ -7,7 +7,9 @@ backend delivery1 {
   .host = "{{BACKEND_HOST}}";
   .port = "{{BACKEND_PORT}}";
 
-  .first_byte_timeout     = 30s; # How long to wait before we receive a first byte from our backend?
+  .max_connections        = 75;
+  .first_byte_timeout     = 10s; # How long to wait before we receive a first byte from our backend?
+  .between_bytes_timeout  = 5s;  # Max time to wait for next package in an http response
   .connect_timeout        = 5s;  # How long to wait for a backend connection?
   .between_bytes_timeout  = 2s;  # How long to wait between bytes received from our backend?
 }
