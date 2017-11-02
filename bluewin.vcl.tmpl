@@ -3,15 +3,27 @@ vcl 4.0;
 import std;
 import directors;
 
-backend delivery1 {
-  .host = "{{BACKEND_HOST}}";
-  .port = "{{BACKEND_PORT}}";
+probe backend_healthcheck {
+  .url = "/status";
+  .interval = 2s;
+  .timeout = 1s;
+  .window = 3;
+  .threshold = 2;
+}
+
+{{ range $index, $hostname := (split .Env.BACKEND ",") }}
+backend delivery_{{ $index }} {
+  {{- $backend := ($hostname | strings.Split ":") }}
+  .host = "{{ index $backend 0 }}";
+  .port = "{{ index $backend 1 }}";
 
   .max_connections        = 75;
   .first_byte_timeout     = 10s; # How long to wait before we receive a first byte from our backend?
   .between_bytes_timeout  = 5s;  # Max time to wait for next package in an http response
   .connect_timeout        = 5s;  # How long to wait for a backend connection?
+  .probe = backend_healthcheck;
 }
+{{ end }}
 
 # Sport results custom pages source
 backend sportdaten {
@@ -23,6 +35,13 @@ acl purge {
   "localhost";
   "127.0.0.1";
   "::1";
+}
+
+sub vcl_init {
+    new delivery = directors.round_robin();
+    {{- range $index, $backend := (split .Env.BACKEND ",") }}
+    delivery.add_backend(delivery_{{ $index }});
+    {{- end }}
 }
 
 sub vcl_recv {
@@ -38,7 +57,7 @@ sub vcl_recv {
     set req.backend_hint = sportdaten;
   }
   else {
-    set req.backend_hint = delivery1;
+    set req.backend_hint = delivery.backend();
   }
 
   # Remove the proxy header (see https://httpoxy.org/#mitigate-varnish)

@@ -18,14 +18,13 @@ All configuration is done via environment variables.
 
 ### Run
 
-* `BACKEND_HOST` -- the IP address or hostname of the delivery server
-* `BACKEND_PORT` -- the HTTP port of the delivery server
+* `BACKEND` the hostname:port of the backend, supports comma delimited values
 
 
 ## Create a container and give it a name
 
 ```bash
-docker run -p 80:80 --env BACKEND_HOST=127.0.0.1 --env BACKEND_PORT=9090 --name varnish livingdocs/varnish
+docker run -p 80:80 --env BACKEND=backend:9090 --name varnish livingdocs/varnish
 ```
 
 ## Start an existing container
