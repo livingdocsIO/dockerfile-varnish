@@ -17,7 +17,7 @@ backend delivery_{{ $index }} {
   .host = "{{ index $backend 0 }}";
   .port = "{{ index $backend 1 }}";
 
-  .max_connections        = 75;
+  .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" "75" }};
   .first_byte_timeout     = 10s; # How long to wait before we receive a first byte from our backend?
   .between_bytes_timeout  = 5s;  # Max time to wait for next package in an http response
   .connect_timeout        = 5s;  # How long to wait for a backend connection?
