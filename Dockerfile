@@ -1,6 +1,6 @@
 FROM alpine:edge
 
-ARG VERSION=5.1.3-r0
+ARG VERSION=5.2.0-r0
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
 RUN apk add --no-cache tini gomplate varnish=$VERSION && rm -rf /var/cache/apk/*
 
