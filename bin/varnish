@@ -1,0 +1,3 @@
+#!/bin/sh
+dd if=/dev/random of=/etc/varnish/secret count=1
+exec varnishd -F -f $VARNISH_CONFIG -S /etc/varnish/secret -s malloc,$VARNISH_CACHE_SIZE -a 0.0.0.0:$VARNISH_PORT -T 0.0.0.0:$VARNISH_ADMIN_PORT -p feature=+http2

@@ -2,32 +2,39 @@ vcl 4.0;
 
 import std;
 import directors;
+{{ $BACKENDS := (split (getenv "BACKEND") ",") }}
 
-probe backend_healthcheck {
-  .url = "/status";
-  .interval = 2s;
-  .timeout = 1s;
-  .window = 3;
-  .threshold = 2;
-}
+{{ range $backendIndex, $hostnameWithPort := $BACKENDS }}
+  {{- $backend := (split $hostnameWithPort ":") }}
+  {{- $hostname := (index $backend 0) }}
+  {{- $port := (index $backend 1) }}
 
-{{ range $index, $hostname := (split .Env.BACKEND ",") }}
-backend delivery_{{ $index }} {
-  {{- $backend := ($hostname | strings.Split ":") }}
-  .host = "{{ index $backend 0 }}";
-  .port = "{{ index $backend 1 }}";
+  {{ range $ipIndex, $ip := lookupIP $hostname }}
+backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
+  .host = "{{ $ip }}";
+  .port = "{{ $port }}";
 
   .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" "75" }};
-  .first_byte_timeout     = 10s; # How long to wait before we receive a first byte from our backend?
-  .between_bytes_timeout  = 5s;  # Max time to wait for next package in an http response
-  .connect_timeout        = 5s;  # How long to wait for a backend connection?
-  .probe = backend_healthcheck;
+  .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" "10s" }}; # How long to wait before we receive a first byte from our backend?
+  .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" "5s" }};  # Max time to wait for next package in an http response
+  .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" "5s" }};  # How long to wait for a backend connection?
+  {{ if eq (getenv "BACKEND_PROBE" "true") "true" }}
+  .probe = {
+    .url = "{{getenv "BACKEND_PROBE_URL" "/status"}}";
+    .interval = {{getenv "BACKEND_PROBE_INTERVAL" "2s"}};
+    .timeout = {{getenv "BACKEND_PROBE_TIMEOUT" "1s"}};
+    .window = {{getenv "BACKEND_PROBE_WINDOW" "3"}};
+    .threshold = {{getenv "BACKEND_PROBE_THRESHOLD" "2"}};
+  }
+  {{ end }}
 }
+  {{ end }}
 {{ end }}
 
 # Sport results custom pages source
 backend sportdaten {
   .host = "sportdaten.bluewin.ch";
+  .port = "80";
 }
 
 # allowed to purge
@@ -38,10 +45,16 @@ acl purge {
 }
 
 sub vcl_init {
-    new delivery = directors.round_robin();
-    {{- range $index, $backend := (split .Env.BACKEND ",") }}
-    delivery.add_backend(delivery_{{ $index }});
-    {{- end }}
+  new delivery = directors.round_robin();
+  {{- range $backendIndex, $hostnameWithPort := $BACKENDS -}}
+    {{- $backend := (split $hostnameWithPort ":") -}}
+    {{- $hostname := (index $backend 0) -}}
+    {{- $port := (index $backend 1) -}}
+
+    {{ range $ipIndex, $ip := lookupIP $hostname }}
+  delivery.add_backend(backend_{{ $backendIndex }}_{{ $ipIndex }});
+    {{- end -}}
+  {{- end }}
 }
 
 sub vcl_recv {
@@ -115,9 +128,6 @@ sub vcl_recv {
   # Nuke all cookies
   unset req.http.Cookie;
 
-  # Strip Auth and then cache
-  unset req.http.Authorization;
-
   return (hash);
 }
 
@@ -133,6 +143,8 @@ sub vcl_hash {
   # Cache based on user agent
   if (req.http.User-Agent == "bluewin-app") { hash_data("ua-app"); }
   else { hash_data("ua-default"); }
+
+  if (req.http.Authorization) { hash_data(req.http.Authorization); }
 
   # Cache based on url
   hash_data(req.url);

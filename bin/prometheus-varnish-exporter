@@ -1,0 +1,4 @@
+#!/bin/sh
+sleep 1
+exec prometheus_varnish_exporter -no-exit
+
