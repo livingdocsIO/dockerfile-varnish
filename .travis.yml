@@ -4,7 +4,7 @@ services:
   - docker
 
 env:
-  - VERSION=5.2.0-r0 NAME=varnish513 TAGS="livingdocs/bluewin-varnish:5.2.0-r0 livingdocs/bluewin-varnish:latest"
+  - VERSION=5.2.0-r0 NAME=varnish5 TAGS="livingdocs/varnish:5.2.0-r0 livingdocs/varnish:latest"
 
 before_install:
   # docker tools
