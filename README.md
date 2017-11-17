@@ -16,6 +16,14 @@ All configuration is done via environment variables.
 * (optional) `VARNISH_PORT`
     * defaults to `80`
 
+```bash
+docker build -t livingdocs/varnish .
+docker run --rm -e BACKEND=example.com:80 -e BACKEND_PROBE=false -p 8080:80 -p 6081:6081 -it --name varnish livingdocs/varnish
+
+# test
+curl -H 'Host: example.com' localhost:8080
+```
+
 ### Run
 
 * `BACKEND` the hostname:port of the backend, supports comma delimited values
