@@ -3,6 +3,7 @@ vcl 4.0;
 import std;
 import directors;
 {{ $BACKENDS := (split (getenv "BACKEND") ",") }}
+{{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
 
 {{ range $backendIndex, $hostnameWithPort := $BACKENDS }}
   {{- $backend := (split $hostnameWithPort ":") }}
@@ -14,17 +15,17 @@ backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
   .host = "{{ $ip }}";
   .port = "{{ $port }}";
 
-  .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" "75" }};
-  .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" "10s" }}; # How long to wait before we receive a first byte from our backend?
-  .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" "5s" }};  # Max time to wait for next package in an http response
-  .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" "5s" }};  # How long to wait for a backend connection?
-  {{ if eq (getenv "BACKEND_PROBE" "true") "true" }}
+  .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" }};
+  .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" }}; # How long to wait before we receive a first byte from our backend?
+  .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" }};  # Max time to wait for next package in an http response
+  .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" }};  # How long to wait for a backend connection?
+  {{ if eq (getenv "BACKEND_PROBE") "true" }}
   .probe = {
-    .url = "{{getenv "BACKEND_PROBE_URL" "/status"}}";
-    .interval = {{getenv "BACKEND_PROBE_INTERVAL" "2s"}};
-    .timeout = {{getenv "BACKEND_PROBE_TIMEOUT" "1s"}};
-    .window = {{getenv "BACKEND_PROBE_WINDOW" "3"}};
-    .threshold = {{getenv "BACKEND_PROBE_THRESHOLD" "2"}};
+    .url = "{{ getenv "BACKEND_PROBE_URL" }}";
+    .interval = {{ getenv "BACKEND_PROBE_INTERVAL" }};
+    .timeout = {{ getenv "BACKEND_PROBE_TIMEOUT" }};
+    .window = {{ getenv "BACKEND_PROBE_WINDOW" }};
+    .threshold = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
   }
   {{ end }}
 }
@@ -33,7 +34,6 @@ backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
 
 {{ if (getenv "REMOTE_BACKEND") }}
   # Remote backends are unmonitored backends that only
-  {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
   {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
     {{- $backend := (split $hostnameWithPort ":") }}
     {{- $hostname := (index $backend 0) }}
@@ -80,7 +80,6 @@ sub vcl_recv {
   set req.backend_hint = delivery.backend();
 
   {{ if (getenv "REMOTE_BACKEND") }}
-    {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
     {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
       {{- $backend := (split $hostnameWithPort ":") }}
       {{- $hostname := (index $backend 0) }}

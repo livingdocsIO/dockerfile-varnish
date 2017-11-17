@@ -9,15 +9,30 @@ RUN ls -lisa /go/bin
 FROM alpine:edge
 ARG VERSION=5.2.0-r0
 
+ENV VARNISH_CONFIG='/etc/varnish/default.vcl'
+ENV VARNISH_CONFIG_TEMPLATE='/etc/confd/templates/varnish.vcl.tmpl'
+ENV VARNISH_CACHE_SIZE=512m
+ENV VARNISH_PORT=80
+ENV VARNISH_ADMIN_PORT=2000
+ENV VARNISH_ADMIN_SECRET=
+ENV VARNISH_ADMIN_SECRET_FILE=/etc/varnish/secret
+
+ENV BACKEND=
+ENV BACKEND_MAX_CONNECTIONS=75
+ENV BACKEND_FIRST_BYTES_TIMEOUT=10s
+ENV BACKEND_BETWEEN_BYTES_TIMEOUT=5s
+ENV BACKEND_CONNECT_TIMEOUT=5s
+ENV BACKEND_PROBE=true
+ENV BACKEND_PROBE_URL=/status
+ENV BACKEND_PROBE_INTERVAL=2s
+ENV BACKEND_PROBE_TIMEOUT=1s
+ENV BACKEND_PROBE_WINDOW=3
+ENV BACKEND_PROBE_THRESHOLD=2
+ENV REMOTE_BACKEND=
+
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
 RUN apk add --no-cache tini varnish=$VERSION ca-certificates bind-tools
 COPY --from=go /go/bin/* /bin/
-
-ENV VARNISH_CONFIG '/etc/varnish/default.vcl'
-ENV VARNISH_CONFIG_TEMPLATE '/etc/confd/templates/varnish.vcl.tmpl'
-ENV VARNISH_CACHE_SIZE 512m
-ENV VARNISH_PORT 80
-ENV VARNISH_ADMIN_PORT 2000
 
 COPY entrypoint.sh /entrypoint.sh
 COPY default.vcl.tmpl $VARNISH_CONFIG_TEMPLATE
