@@ -1,0 +1,12 @@
+#!/bin/sh
+FILE=$VARNISH_CONFIG
+ADMIN=localhost:$VARNISH_ADMIN_PORT
+NAME="varnish_$(date +%s)"
+
+function error () {
+  echo 1>&2 "Failed to reload $FILE."
+  exit 1
+}
+
+varnishadm -T $ADMIN -S /etc/varnish/secret vcl.load $NAME $FILE || error
+varnishadm -T $ADMIN -S /etc/varnish/secret vcl.use $NAME || error

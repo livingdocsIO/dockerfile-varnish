@@ -1,0 +1,8 @@
+#!/bin/sh
+if [ -z "$RANCHER" ]; then
+  exec /bin/confd -backend env --interval 10
+else
+  exec /bin/confd -backend rancher --prefix=/latest/self/stack/services --interval 10
+fi
+
+

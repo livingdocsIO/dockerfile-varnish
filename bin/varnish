@@ -1,0 +1,10 @@
+#!/bin/sh
+if [ ! -f $VARNISH_ADMIN_SECRET_FILE ]; then
+  if [ -z "$VARNISH_ADMIN_SECRET" ]; then
+    echo $VARNISH_ADMIN_SECRET > $VARNISH_ADMIN_SECRET_FILE
+  else
+    dd if=/dev/random of=$VARNISH_ADMIN_SECRET_FILE count=1
+  fi
+fi
+
+exec varnishd -F -f $VARNISH_CONFIG -S /etc/varnish/secret -s malloc,$VARNISH_CACHE_SIZE -a 0.0.0.0:$VARNISH_PORT -T 0.0.0.0:$VARNISH_ADMIN_PORT -p feature=+http2
