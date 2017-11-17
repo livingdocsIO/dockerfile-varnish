@@ -31,11 +31,22 @@ backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
   {{ end }}
 {{ end }}
 
-# Sport results custom pages source
-backend sportdaten {
-  .host = "sportdaten.bluewin.ch";
-  .port = "80";
+{{ if (getenv "REMOTE_BACKEND") }}
+  # Remote backends are unmonitored backends that only
+  {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
+  {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
+    {{- $backend := (split $hostnameWithPort ":") }}
+    {{- $hostname := (index $backend 0) }}
+    {{- $port := (index $backend 1) }}
+
+    {{ range $ipIndex, $ip := lookupIP $hostname }}
+backend remote_{{ $backendIndex }}_{{ $ipIndex }} {
+  .host = "{{ $ip }}";
+  .port = "{{ $port }}";
 }
+    {{ end }}
+  {{ end }}
+{{ end }}
 
 # allowed to purge
 acl purge {
@@ -66,12 +77,21 @@ sub vcl_recv {
   # Its purpose is to decide whether or not to serve the request, how to do it,
   # and, if applicable, which backend to use. Also used to modify the request.
 
-  if (req.http.host == "sportdaten.bluewin.ch") {
-    set req.backend_hint = sportdaten;
+  set req.backend_hint = delivery.backend();
+
+  {{ if (getenv "REMOTE_BACKEND") }}
+    {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
+    {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
+      {{- $backend := (split $hostnameWithPort ":") }}
+      {{- $hostname := (index $backend 0) }}
+
+      {{ range $ipIndex, $ip := lookupIP $hostname }}
+  if (req.http.host == "{{ $hostname }}") {
+    set req.backend_hint = remote_{{ $backendIndex }}_{{ $ipIndex }};
   }
-  else {
-    set req.backend_hint = delivery.backend();
-  }
+      {{ end }}
+    {{ end }}
+  {{ end }}
 
   # Remove the proxy header (see https://httpoxy.org/#mitigate-varnish)
   unset req.http.proxy;
@@ -141,8 +161,7 @@ sub vcl_hash {
   else { hash_data(server.ip); }
 
   # Cache based on user agent
-  if (req.http.User-Agent == "bluewin-app") { hash_data("ua-app"); }
-  else { hash_data("ua-default"); }
+  if (req.http.User-Agent == "bluewin-app") { hash_data("bluewin-app"); }
 
   if (req.http.Authorization) { hash_data(req.http.Authorization); }
 
@@ -184,12 +203,6 @@ sub vcl_backend_response {
 
   # Enable ESI for pages that request it
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
-    set beresp.do_esi = true;
-    set beresp.do_gzip = true;
-  }
-
-  # Enable ESI for sport results custom pages
-  if (bereq.url ~ "/(de|fr|it)/sport/(resultate|resultats|risultati)?.*.html") {
     set beresp.do_esi = true;
     set beresp.do_gzip = true;
   }
