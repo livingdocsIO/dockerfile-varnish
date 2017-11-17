@@ -9,6 +9,10 @@ RUN ls -lisa /go/bin
 FROM alpine:edge
 ARG VERSION=5.2.0-r0
 
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
+RUN apk add --no-cache tini varnish=$VERSION ca-certificates bind-tools
+COPY --from=go /go/bin/* /bin/
+
 ENV VARNISH_CONFIG='/etc/varnish/default.vcl'
 ENV VARNISH_CONFIG_TEMPLATE='/etc/confd/templates/varnish.vcl.tmpl'
 ENV VARNISH_CACHE_SIZE=512m
@@ -29,10 +33,7 @@ ENV BACKEND_PROBE_TIMEOUT=1s
 ENV BACKEND_PROBE_WINDOW=3
 ENV BACKEND_PROBE_THRESHOLD=2
 ENV REMOTE_BACKEND=
-
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
-RUN apk add --no-cache tini varnish=$VERSION ca-certificates bind-tools
-COPY --from=go /go/bin/* /bin/
+ENV PROMETHEUS_EXPORTER_PORT=9131
 
 COPY entrypoint.sh /entrypoint.sh
 COPY default.vcl.tmpl $VARNISH_CONFIG_TEMPLATE
@@ -40,5 +41,7 @@ COPY varnish.toml /etc/confd/conf.d/varnish.toml
 COPY ./bin/* /bin/
 
 EXPOSE $VARNISH_PORT
+EXPOSE $VARNISH_ADMIN_PORT
+EXPOSE $PROMETHEUS_EXPORTER_PORT
 ENTRYPOINT ["/sbin/tini", "-g", "--"]
 CMD ["/entrypoint.sh"]
