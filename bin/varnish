@@ -7,4 +7,4 @@ if [ ! -f $VARNISH_ADMIN_SECRET_FILE ]; then
   fi
 fi
 
-exec varnishd -F -f $VARNISH_CONFIG -S /etc/varnish/secret -s malloc,$VARNISH_CACHE_SIZE -a 0.0.0.0:$VARNISH_PORT -T 0.0.0.0:$VARNISH_ADMIN_PORT -p feature=+http2
+exec varnishd -F -f $VARNISH_CONFIG -S $VARNISH_ADMIN_SECRET_FILE -s malloc,$VARNISH_CACHE_SIZE -a 0.0.0.0:$VARNISH_PORT -T 0.0.0.0:$VARNISH_ADMIN_PORT -p feature=+http2
