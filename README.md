@@ -18,11 +18,15 @@ curl -H 'Host: example.com' localhost:8080
 
 ### Run
 
-* `VARNISH_CACHE_SIZE`, optional, default: 512m
 * `VARNISH_PORT`, optional, default: 80
 * `VARNISH_ADMIN_PORT`, optional, default: 2000
 * `VARNISH_ADMIN_SECRET_FILE`, optional, default: `VARNISH_ADMIN_SECRET` env variable
 * `VARNISH_ADMIN_SECRET`, optional, default to a random string
+
+* `VARNISH_CACHE_SIZE`, optional, default: 512m
+* `VARNISH_CACHE_TTL`, optional, default: 4m
+* `VARNISH_CACHE_GRACE`, optional, default: 24h
+
 * `BACKEND` the hostname:port of the backend, supports comma delimited values
 * `BACKEND_MAX_CONNECTIONS`, optional, default: 75
 * `BACKEND_FIRST_BYTES_TIMEOUT`, optional, default: 10s
@@ -34,7 +38,7 @@ curl -H 'Host: example.com' localhost:8080
 * `BACKEND_PROBE_TIMEOUT`, optional, default: 1s
 * `BACKEND_PROBE_WINDOW`, optional, default: 3
 * `BACKEND_PROBE_THRESHOLD`, optional, default: 3
-* `REMOTE_BACKEND`, optional
+* `REMOTE_BACKEND`, optional, the host:port of additional backends you can use for example with ESI
 * `PROMETHEUS_EXPORTER_PORT`, optional, default 9131
 
 ## Create a container and give it a name
