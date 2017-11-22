@@ -7,7 +7,7 @@ RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.14.0 && go bu
 RUN ls -lisa /go/bin
 
 FROM alpine:edge
-ARG VERSION=5.2.0-r0
+ARG VERSION=5.2.1-r0
 
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
 RUN apk add --no-cache tini varnish=$VERSION ca-certificates bind-tools
