@@ -1,4 +1,4 @@
 #!/bin/sh
 set -e
 /bin/varnish-reload-synconly
-exitd /bin/varnish-reload-watch /bin/varnish /bin/varnish-logs /bin/prometheus-varnish-exporter
+NO_LOG_PREFIX=first exitd /bin/varnish-logs /bin/varnish /bin/varnish-reload-watch /bin/prometheus-varnish-exporter

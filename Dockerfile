@@ -1,13 +1,13 @@
 FROM golang:1.9.2-alpine3.6 as go
 RUN apk add --no-cache git
-RUN go get -d github.com/jonnenauha/prometheus_varnish_exporter github.com/romabysen/exitd github.com/kelseyhightower/confd
+RUN go get -d github.com/jonnenauha/prometheus_varnish_exporter github.com/marcbachmann/exitd github.com/kelseyhightower/confd
 RUN cd /go/src/github.com/jonnenauha/prometheus_varnish_exporter && git checkout 1.3.4 && go build -o /go/bin/prometheus_varnish_exporter
-RUN cd /go/src/github.com/romabysen/exitd && git checkout 1.1.0 && go build -o /go/bin/exitd
+RUN cd /go/src/github.com/marcbachmann/exitd && git checkout master && go build -o /go/bin/exitd
 RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.14.0 && go build  -o /go/bin/confd
 RUN ls -lisa /go/bin
 
 FROM alpine:edge
-ARG VERSION=5.2.0-r0
+ARG VERSION=5.2.1-r0
 
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
 RUN apk add --no-cache tini varnish=$VERSION ca-certificates bind-tools
