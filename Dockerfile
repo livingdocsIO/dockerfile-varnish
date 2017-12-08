@@ -7,10 +7,10 @@ RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.14.0 && go bu
 RUN ls -lisa /go/bin
 
 FROM alpine:edge
-ARG VERSION=5.2.1-r0
+ENV VARNISH_VERSION=5.2.1-r0
 
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
-RUN apk add --no-cache tini varnish=$VERSION ca-certificates bind-tools
+RUN apk add --no-cache tini varnish=$VARNISH_VERSION ca-certificates bind-tools
 COPY --from=go /go/bin/* /bin/
 
 ENV VARNISH_CONFIG='/etc/varnish/default.vcl'
@@ -22,6 +22,7 @@ ENV VARNISH_ADMIN_SECRET_FILE=/etc/varnish/secret
 ENV VARNISH_CACHE_SIZE=512m
 ENV VARNISH_CACHE_TTL=4m
 ENV VARNISH_CACHE_GRACE=24h
+ENV VARNISH_RUNTIME_PARAMETERS="-p timeout_idle=60"
 
 ENV BACKEND=
 ENV BACKEND_MAX_CONNECTIONS=75
