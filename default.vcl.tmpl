@@ -2,6 +2,7 @@ vcl 4.0;
 
 import std;
 import directors;
+
 {{ $BACKENDS := (split (getenv "BACKEND") ",") }}
 {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
 

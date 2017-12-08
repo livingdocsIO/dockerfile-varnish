@@ -4,7 +4,7 @@ services:
   - docker
 
 env:
-  - VERSION=5.2.1-r0 NAME=varnish5 TAGS="livingdocs/varnish:5.2.1-r0 livingdocs/varnish:latest"
+  - NAME=varnish5 TAGS="livingdocs/varnish:5.2.1-r1 livingdocs/varnish:latest"
 
 before_install:
   # docker tools
@@ -13,7 +13,7 @@ before_install:
   - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
 
 script:
-  - docker build --build-arg VERSION=$VERSION -t $NAME .
+  - docker build -t $NAME .
 
 after_success:
   - if [ "$TRAVIS_BRANCH" == "master" ]; then
