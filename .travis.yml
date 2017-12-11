@@ -4,7 +4,7 @@ services:
   - docker
 
 env:
-  - NAME=varnish5 TAGS="livingdocs/varnish:5.2.1-r1 livingdocs/varnish:latest"
+  - NAME=varnish5 TAGS="livingdocs/varnish:5.2.1-r2 livingdocs/varnish:latest"
 
 before_install:
   # docker tools
