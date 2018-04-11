@@ -10,7 +10,7 @@ before_install:
   # docker tools
   - GIST=https://gist.githubusercontent.com/marcbachmann/16574ba8c614bb3b78614a351f324b86/raw/a7e17acc57938a047c093f560858e3b0a8e2c741
   - curl -s $GIST/update-docker-engine.sh | bash
-  - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+  - echo $DOCKER_PASSWORD | docker login -u="$DOCKER_USERNAME" --password-stdin 1>/dev/null
 
 script:
   - docker build -t $NAME .
