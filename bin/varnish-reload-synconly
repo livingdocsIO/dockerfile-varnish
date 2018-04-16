@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /bin/confd -onetime -sync-only -backend env
+exec /bin/confd --log-level debug --onetime --sync-only --backend env

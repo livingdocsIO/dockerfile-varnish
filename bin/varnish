@@ -7,6 +7,7 @@ if [ ! -f $VARNISH_ADMIN_SECRET_FILE ]; then
   fi
 fi
 
+echo 'Starting service...'
 exec varnishd -F -f $VARNISH_CONFIG \
   -S $VARNISH_ADMIN_SECRET_FILE \
   -s malloc,$VARNISH_CACHE_SIZE \
