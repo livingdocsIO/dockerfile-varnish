@@ -6,10 +6,9 @@ RUN cd /go/src/github.com/marcbachmann/exitd && git checkout master && go build 
 RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.14.0 && go build  -o /go/bin/confd
 RUN ls -lisa /go/bin
 
-FROM alpine:edge
+FROM alpine:3.7
 ENV VARNISH_VERSION=5.2.1-r0
 
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community/" >> /etc/apk/repositories
 RUN apk add --no-cache tini varnish=$VARNISH_VERSION ca-certificates bind-tools
 COPY --from=go /go/bin/* /bin/
 
