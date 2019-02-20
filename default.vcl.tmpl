@@ -197,7 +197,7 @@ sub vcl_backend_response {
   # Allow stale content, in case the backend goes down.
   # make Varnish keep all objects for 24 hours beyond their TTL
   if (beresp.ttl >= 0s) {
-    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace, {{ getenv "VARNISH_CACHE_GRACE" }});
+    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s", {{ getenv "VARNISH_CACHE_GRACE" }});
     unset beresp.http.X-Varnish-Grace;
   }
 
