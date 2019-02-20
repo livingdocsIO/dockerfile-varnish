@@ -1,0 +1,34 @@
+---
+kind: pipeline
+name: default
+
+x-settings: &dockersettings
+  username:
+    from_secret: docker_username
+  password:
+    from_secret: docker_password
+  repo: livingdocs/varnish
+  tags: [5.2.1-r5, latest]
+
+steps:
+- name: build
+  image: plugins/docker
+  settings:
+    dry_run: true
+    <<: *dockersettings
+  when:
+    event: [push]
+
+- name: publish
+  image: plugins/docker
+  settings:
+    <<: *dockersettings
+  when:
+    branch: [master]
+    event: [push]
+
+---
+kind: signature
+hmac: f238499060565d0b517e9c77c2fdeee76006e08e7ed5ae2daa1917ef8b811f1a
+
+...
