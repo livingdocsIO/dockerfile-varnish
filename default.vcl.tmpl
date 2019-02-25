@@ -203,6 +203,21 @@ sub vcl_backend_response {
   # Enable ESI for pages that request it
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     set beresp.do_esi = true;
+  }
+
+  # Make sure that varnish always saves the gzipped content, even
+  # when the backend just returns raw text content
+  if (beresp.http.content-type ~ "text/plain"
+      || beresp.http.content-type ~ "text/xml"
+      || beresp.http.content-type ~ "text/css"
+      || beresp.http.content-type ~ "text/html"
+      || beresp.http.content-type ~ "application/(x-)?javascript"
+      || beresp.http.content-type ~ "application/(x-)?font-ttf"
+      || beresp.http.content-type ~ "application/(x-)?font-opentype"
+      || beresp.http.content-type ~ "application/font-woff"
+      || beresp.http.content-type ~ "application/vnd\.ms-fontobject"
+      || beresp.http.content-type ~ "image/svg\+xml"
+   ) {
     set beresp.do_gzip = true;
   }
 
