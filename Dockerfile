@@ -1,4 +1,4 @@
-FROM golang:1.9.2-alpine3.6 as go
+FROM golang:1.11.5-alpine3.9 as go
 RUN apk add --no-cache git
 RUN go get -d github.com/jonnenauha/prometheus_varnish_exporter github.com/marcbachmann/exitd github.com/kelseyhightower/confd
 RUN cd /go/src/github.com/jonnenauha/prometheus_varnish_exporter && git checkout 1.3.4 && go build -ldflags "-X 'main.Version=1.3.4' -X 'main.VersionHash=$(git rev-parse --short HEAD)' -X 'main.VersionDate=$(date -u '+%d.%m.%Y %H:%M:%S')'" -o /go/bin/prometheus_varnish_exporter
@@ -6,8 +6,8 @@ RUN cd /go/src/github.com/marcbachmann/exitd && git checkout master && go build 
 RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go build -ldflags "-X 'main.GitSHA=$(git rev-parse --short HEAD)'"  -o /go/bin/confd
 RUN ls -lisa /go/bin
 
-FROM alpine:3.7
-ENV VARNISH_VERSION=5.2.1-r0
+FROM alpine:3.9
+ENV VARNISH_VERSION=6.1.1-r0
 
 RUN apk add --no-cache tini varnish=$VARNISH_VERSION ca-certificates bind-tools
 COPY --from=go /go/bin/* /bin/
