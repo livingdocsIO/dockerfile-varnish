@@ -12,7 +12,7 @@ steps:
     password:
       from_secret: docker_password
     repo: livingdocs/varnish
-    tags: [5.2.1-r6, latest]
+    tags: [6.1.1-r0, latest]
 
 - name: publish
   image: plugins/docker
@@ -22,7 +22,7 @@ steps:
     password:
       from_secret: docker_password
     repo: livingdocs/varnish
-    tags: [5.2.1-r6, latest]
+    tags: [6.1.1-r0, latest]
 
   when:
     branch: [master]
@@ -32,6 +32,6 @@ trigger:
 
 ---
 kind: signature
-hmac: b2cafbacc284d4ec33aaa3841d0ebe65cb2668338a940c910c328e317286dd21
+hmac: ab382047fc1e496efffbc5fd5ba3705396485ed0dcd566db909fe1b34e46aec5
 
 ...
