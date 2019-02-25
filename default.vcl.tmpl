@@ -198,7 +198,6 @@ sub vcl_backend_response {
   # make Varnish keep all objects for 24 hours beyond their TTL
   if (beresp.ttl >= 0s) {
     set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s", {{ getenv "VARNISH_CACHE_GRACE" }});
-    unset beresp.http.X-Varnish-Grace;
   }
 
   # Enable ESI for pages that request it
@@ -207,7 +206,6 @@ sub vcl_backend_response {
     set beresp.do_gzip = true;
   }
 
-  unset beresp.http.Surrogate-Control;
   return (deliver);
 }
 
@@ -226,11 +224,21 @@ sub vcl_deliver {
   # bans are in use. See bug 1492 for details. So take hits with a grain of salt
   set resp.http.X-Cache-Hits = obj.hits;
 
+  # Disable ETag for ESI pages as the ETag of subrequests doesn't propagate to the parent
+  # Pages served would always rely on the cache of the main page and therefore
+  # never refresh, even if the subrequest is updated
+  if (resp.http.Surrogate-Control ~ "ESI/1.0") {
+    unset resp.http.ETag;
+    unset resp.http.Last-Modified;
+  }
+
   # Remove some headers
   unset resp.http.Server;
   unset resp.http.X-Varnish;
   unset resp.http.Via;
   unset resp.http.X-Generator;
+  unset resp.http.Surrogate-Control;
+  unset resp.http.X-Varnish-Grace;
 
   return (deliver);
 }
