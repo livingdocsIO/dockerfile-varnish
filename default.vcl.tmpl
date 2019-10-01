@@ -220,6 +220,27 @@ sub vcl_backend_response {
     set beresp.do_gzip = true;
   }
 
+  # if there is no s-maxage header, set a default cache time
+  # 59 it's because we can differ between the default header and header's set in the application
+  if (beresp.http.Cache-Control !~ "s-maxage") {
+      set beresp.ttl = 59s;
+  }
+
+  # if there is s-maxage header, use it as a default cache time
+  # we must override this, because max-age overrides s-maxage
+  # http://book.varnish-software.com/4.0/chapters/VCL_Basics.html#the-initial-value-of-beresp-ttl
+  if (beresp.http.cache-control ~ "s-maxage") {
+
+    # extract the s-maxage value and append "s"
+    set beresp.http.X-VAMP-TTL = regsub(beresp.http.cache-control, "(.*)s-maxage=([0-9]+)(.*)\b", "\2s");
+
+    # set it as a duration, if something fails it will use 65s
+    set beresp.ttl = std.duration(beresp.http.X-VAMP-TTL, 65s);
+
+    # for debugging, we have X-VAMP-TTL and X-VAMP-TTL-AFTER
+    set beresp.http.X-VAMP-TTL-AFTER = beresp.ttl;
+  }
+
   return (deliver);
 }
 
