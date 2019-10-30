@@ -6,10 +6,11 @@ RUN cd /go/src/github.com/marcbachmann/exitd && git checkout master && go build 
 RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go build -ldflags "-X 'main.GitSHA=$(git rev-parse --short HEAD)'"  -o /go/bin/confd
 RUN ls -lisa /go/bin
 
-FROM alpine:3.9
-ENV VARNISH_VERSION=6.1.1-r0
+FROM alpine:3.10
+ENV VARNISH_VERSION=6.3.1-r0
 
-RUN apk add --no-cache tini varnish=$VARNISH_VERSION ca-certificates bind-tools
+RUN apk add --no-cache tini ca-certificates bind-tools nano curl && \
+  apk add --no-cache varnish=$VARNISH_VERSION --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
 COPY --from=go /go/bin/* /bin/
 
 ENV VARNISH_CONFIG='/etc/varnish/default.vcl'
