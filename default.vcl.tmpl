@@ -27,6 +27,7 @@ backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
     .timeout = {{ getenv "BACKEND_PROBE_TIMEOUT" }};
     .window = {{ getenv "BACKEND_PROBE_WINDOW" }};
     .threshold = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
+    .initial = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
   }
   {{ end }}
 }
