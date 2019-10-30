@@ -71,9 +71,6 @@ sub vcl_init {
 }
 
 sub vcl_recv {
-  # Normalize the header, remove the port (in case you're testing this on various TCP ports)
-  set req.http.Host = regsub(req.http.Host, ":[0-9]+", "");
-
   # Called at the beginning of a request, after the complete request has been
   # received and parsed.
   # Its purpose is to decide whether or not to serve the request, how to do it,
@@ -93,9 +90,6 @@ sub vcl_recv {
       {{ end }}
     {{ end }}
   {{ end }}
-
-  # Remove the proxy header (see https://httpoxy.org/#mitigate-varnish)
-  unset req.http.proxy;
 
   # Allow purging
   if (req.method == "PURGE") {
@@ -195,21 +189,18 @@ sub vcl_backend_response {
 
   # Make sure that varnish always saves the gzipped content, even
   # when the backend just returns raw text content
-  if (beresp.http.content-type ~ "text/plain"
-      || beresp.http.content-type ~ "text/xml"
-      || beresp.http.content-type ~ "text/css"
-      || beresp.http.content-type ~ "text/html"
-      || beresp.http.content-type ~ "application/(x-)?javascript"
-      || beresp.http.content-type ~ "application/(x-)?font-ttf"
-      || beresp.http.content-type ~ "application/(x-)?font-opentype"
-      || beresp.http.content-type ~ "application/font-woff"
+  if (beresp.http.content-type ~ "text/(plain|xml|css|html)"
+      || beresp.http.content-type ~ "javascript"
+      || beresp.http.content-type ~ "font-(ttf|opentype|woff)"
       || beresp.http.content-type ~ "application/vnd\.ms-fontobject"
-      || beresp.http.content-type ~ "image/svg\+xml"
+      || beresp.http.content-type ~ "image/svg"
    ) {
     set beresp.do_gzip = true;
   }
 
-  return (deliver);
+  if (beresp.http.content-type ~ "(webp|jpeg|bmp|tiff|gif|png|woff|tar|rar|zip|pdf)") {
+    set beresp.do_stream = true;
+  }
 }
 
 # Called before a cached/fresh object is delivered to the client.
