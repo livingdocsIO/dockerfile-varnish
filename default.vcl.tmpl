@@ -120,21 +120,12 @@ sub vcl_recv {
   }
 
   # Only cache GET or HEAD requests. This makes sure the POST requests are always passed.
-  if (req.method != "GET" && req.method != "HEAD" && req.method != "OPTIONS") {
-    return (pass);
-  }
+  if (req.method != "GET" && req.method != "HEAD" && req.method != "OPTIONS") { return (pass); }
 
   # Some generic URL cleanup, useful for all templates that follow
   # First remove the Google Analytics added parameters, useless for our backend
-  if (req.url ~ "(\?|&)(utm_source|utm_medium|utm_campaign|utm_content|gclid|cx|ie|cof|siteurl)=") {
-    set req.url = regsuball(req.url, "&(utm_source|utm_medium|utm_campaign|utm_content|gclid|cx|ie|cof|siteurl)=([A-z0-9_\-\.%25]+)", "");
-    set req.url = regsuball(req.url, "\?(utm_source|utm_medium|utm_campaign|utm_content|gclid|cx|ie|cof|siteurl)=([A-z0-9_\-\.%25]+)", "?");
-    set req.url = regsub(req.url, "\?&", "?");
-  }
-
-  # Strip hash, server doesn't need it.
-  if (req.url ~ "\#") {
-    set req.url = regsub(req.url, "\#.*$", "");
+  if (req.url ~ "(\?|&)(gclid|utm_[a-z]+)=") {
+    set req.url = regsuball(req.url, "(gclid|utm_[a-z]+)=[-_A-z0-9+()%.]+&?", "");
   }
 
   # Strip a trailing ? if it exists
