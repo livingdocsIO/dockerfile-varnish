@@ -118,6 +118,8 @@ sub vcl_recv {
     # Non-RFC2616 or CONNECT which is weird.
     return (pipe);
   }
+  # Support websockets
+  if (req.http.upgrade ~ "(?i)websocket") { return (pipe); }
 
   # Only cache GET or HEAD requests. This makes sure the POST requests are always passed.
   if (req.method != "GET" && req.method != "HEAD" && req.method != "OPTIONS") { return (pass); }
@@ -140,6 +142,14 @@ sub vcl_recv {
   unset req.http.Cookie;
 
   return (hash);
+}
+
+// Websocket support
+sub vcl_pipe {
+  if (req.http.upgrade) {
+    set bereq.http.upgrade = req.http.upgrade;
+    set bereq.http.connection = req.http.connection;
+  }
 }
 
 # Called after vcl_recv to create a hash value for the request. This is used
