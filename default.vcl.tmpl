@@ -176,12 +176,6 @@ sub vcl_backend_response {
     set beresp.ttl = {{ getenv "VARNISH_CACHE_TTL" }};
   }
 
-  # Allow stale content, in case the backend goes down.
-  # make Varnish keep all objects for 24 hours beyond their TTL
-  if (beresp.ttl >= 0s) {
-    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s", {{ getenv "VARNISH_CACHE_GRACE" }});
-  }
-
   # Enable ESI for pages that request it
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     set beresp.do_esi = true;
@@ -201,6 +195,10 @@ sub vcl_backend_response {
   if (beresp.http.content-type ~ "(webp|jpeg|bmp|tiff|gif|png|woff|tar|rar|zip|pdf)") {
     set beresp.do_stream = true;
   }
+
+  # Allow stale content, in case the backend goes down.
+  # We make Varnish keep all objects for 24 hours (default_grace config) beyond their TTL
+  if (beresp.http.X-Varnish-Grace) { set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s"); }
 }
 
 # Called before a cached/fresh object is delivered to the client.
