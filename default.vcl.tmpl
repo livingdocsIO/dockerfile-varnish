@@ -2,6 +2,7 @@ vcl 4.1;
 
 import std;
 import directors;
+import xkey;
 
 {{ $BACKENDS := (split (getenv "BACKEND") ",") }}
 {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
@@ -98,7 +99,13 @@ sub vcl_recv {
     if (!client.ip ~ purge) {
       return (synth(405, "This IP is not allowed to send PURGE requests."));
     }
-    return (purge);
+
+    if (req.http.xkey) {
+      set req.http.n-gone = xkey.softpurge(req.http.xkey);
+      return (synth(200, "Invalidated "+req.http.n-gone+" objects"));
+    } else {
+      return (purge);
+    }
   }
 
   # Support websockets
