@@ -157,15 +157,6 @@ sub vcl_backend_response {
   # We don't use any cookies, remove them to prevent security issues
   unset beresp.http.Set-Cookie;
 
-  # Directly pass 404 statuses, cache for 5s to throttle requests to a backend
-  if (beresp.status == 404) {
-    return (pass(5s));
-  }
-
-  # Directly pass 50x responses, cache for 15s to throttle requests to a backend
-  if (beresp.status >= 500 && beresp.status < 600) {
-    return (pass(15s));
-  }
   # Enable ESI for pages that request it
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     set beresp.do_esi = true;
@@ -184,6 +175,20 @@ sub vcl_backend_response {
 
   if (beresp.http.content-type ~ "(webp|jpeg|bmp|tiff|gif|png|woff|tar|rar|zip|pdf)") {
     set beresp.do_stream = true;
+  }
+
+  # Directly pass 50x responses to vcl_backend_error
+  if (beresp.status >= 500) {
+    if (bereq.is_bgfetch) { return (abandon); }
+    if (bereq.retries < 1) { return (retry); }
+    set beresp.ttl = 15s;
+    return (deliver);
+  }
+
+  # Directly pass 404 statuses, cache for 5s to throttle requests to a backend
+  if (beresp.status == 404) {
+    set beresp.ttl = 10s;
+    return (deliver);
   }
 
   # Allow stale content, in case the backend goes down.
@@ -228,15 +233,15 @@ sub vcl_deliver {
 sub vcl_hit {
   if (obj.ttl >= 0s) {
     set req.http.X-Cache-Grace = "HIT";
-  } else if (obj.ttl + 10s > 0s) {
-    // Object is probably updating in the background
+  } else if (obj.ttl + obj.grace > 0s) {
     set req.http.X-Cache-Grace = "MISS";
+  } else if (!std.healthy(req.backend_hint)) {
+    return (synth(503));
   } else {
-    // Backend is probably down
     set req.http.X-Cache-Grace = "STALE";
   }
 
-  return(deliver);
+  return (deliver);
 }
 
 sub vcl_purge {
@@ -248,7 +253,22 @@ sub vcl_purge {
   }
 }
 
+sub vcl_backend_error {
+  if (bereq.is_bgfetch) { return (abandon); }
+  if (bereq.retries < 1) { return (retry); }
+  set beresp.ttl = 15s;
+  return (fail);
+}
+
 sub vcl_synth {
+  if (req.http.Content-Type ~ "application/json") {
+    set resp.http.Content-Type = "application/json; charset=utf-8";
+    synthetic(regsub(regsub(regsuball("{'status':_s,'error':'_e'}", "'", {"""}), "_s", resp.status), "_e", resp.reason));
+  } else {
+    set resp.http.Content-Type = "text/html; charset=utf-8";
+    synthetic({"<!DOCTYPE html><html><head><title>"} + resp.status + " " + resp.reason + {"</title></head><body><h1>Error "} + resp.status + " " + resp.reason + {"</h1></body></html>"});
+  }
+
   return (deliver);
 }
 
