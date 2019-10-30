@@ -4,9 +4,30 @@ ADMIN=localhost:$VARNISH_ADMIN_PORT
 NAME="varnish_$(date +%s)"
 
 function error () {
-  echo 1>&2 "Failed to reload $FILE."
+  echo 1>&2 $1
   exit 1
 }
 
-varnishadm -T $ADMIN -S /etc/varnish/secret vcl.load $NAME $FILE || error
-varnishadm -T $ADMIN -S /etc/varnish/secret vcl.use $NAME || error
+varnishadm() {
+  if ! OUTPUT=$(command varnishadm -T $ADMIN -S /etc/varnish/secret -- "$@" 2>&1)
+  then
+    echo "Command: varnishadm -T $ADMIN -S /etc/varnish/secret -- $*"
+    echo
+    echo "$OUTPUT"
+    echo
+    return 1
+  fi >&2
+  echo "$OUTPUT"
+}
+
+varnishadm vcl.load $NAME $FILE || error "Failed to vcl.load $FILE."
+sleep 5
+
+varnishadm vcl.use $NAME || error "Failed to vcl.use $FILE."
+sleep 5
+
+INACTIVE_VCLS=$(varnishadm vcl.list | awk '/(auto|cold)\/cold/ {print $4}') || error "Failed to get the vcl list."
+for vclname in $INACTIVE_VCLS; do
+  echo "Call varnishadm vcl.discard $vclname"
+  varnishadm vcl.discard $vclname 1>/dev/null || error "Failed to vcl.discard $vclname."
+done;
