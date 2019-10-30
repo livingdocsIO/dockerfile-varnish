@@ -10,7 +10,14 @@ FROM alpine:3.10
 ENV VARNISH_VERSION=6.3.1-r0
 
 RUN apk add --no-cache tini ca-certificates bind-tools nano curl && \
-  apk add --no-cache varnish=$VARNISH_VERSION --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
+  apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --no-cache varnish=$VARNISH_VERSION && \
+  apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --virtual build-dependencies --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
+    && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.3' --single-branch /varnish-modules \
+    && cd /varnish-modules \
+    && ./bootstrap && ./configure && make && make install \
+    && apk del build-dependencies \
+    && rm -Rf /varnish-modules
+
 COPY --from=go /go/bin/* /bin/
 
 ENV VARNISH_CONFIG='/etc/varnish/default.vcl'
