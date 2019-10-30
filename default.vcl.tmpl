@@ -166,16 +166,6 @@ sub vcl_backend_response {
   if (beresp.status >= 500 && beresp.status < 600) {
     return (pass(15s));
   }
-
-  # Set cache time of all cacheable requests that didn't configure a cache ttl
-  if (
-    beresp.ttl <= 0s &&
-    beresp.http.Cache-Control !~ "no-cache|no-store|private" &&
-    beresp.http.Surrogate-Control !~ "no-cache|no-store|private"
-  ) {
-    set beresp.ttl = {{ getenv "VARNISH_CACHE_TTL" }};
-  }
-
   # Enable ESI for pages that request it
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     set beresp.do_esi = true;
