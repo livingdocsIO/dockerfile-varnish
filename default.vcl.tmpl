@@ -152,8 +152,7 @@ sub vcl_hash {
   else { hash_data(server.ip); }
 
   # Cache based on user agent
-  if (req.http.User-Agent == "bluewin-app") { hash_data("bluewin-app"); }
-
+  if (req.http.User-Agent ~ "^[a-zA-Z0-9-]+$") { hash_data(req.http.User-Agent); }
   if (req.http.Authorization) { hash_data(req.http.Authorization); }
 
   # Cache based on url
