@@ -7,6 +7,28 @@ if [ ! -f $VARNISH_ADMIN_SECRET_FILE ]; then
   fi
 fi
 
+function durationToSeconds () {
+  set -f
+  normalize () { echo $1 | tr '[:upper:]' '[:lower:]' | tr -d "\"\\\'" | sed 's/ *y\(ear\)\{0,1\} */y /g; s/ *d\(ay\)\{0,1\} */d /g; s/ *h\(our\)\{0,1\} */h /g; s/ *m\(in\(ute\)\{0,1\}\)\{0,1\} */m /g; s/ *s\(ec\(ond\)\{0,1\}\)\{0,1\} */s /g; s/\([ydhms]\)s/\1/g'; }
+  local value=$(normalize "$1")
+  local fallback=$(normalize "$2")
+
+  echo $value | grep -v '^[-+*/0-9ydhms ]\{0,30\}$' > /dev/null 2>&1
+  if [ $? -eq 0 ]
+  then
+    >&2 echo Invalid duration pattern \"$value\"
+  else
+    if [ "$value" = "" ]; then
+      [ "$fallback" != "" ] && durationToSeconds "$fallback"
+    else
+      sedtmpl () { echo "s/\([0-9]\+\)$1/(0\1 * $2)/g;"; }
+      local template="$(sedtmpl '\( \|$\)' 1) $(sedtmpl y '365 * 86400') $(sedtmpl d 86400) $(sedtmpl h 3600) $(sedtmpl m 60) $(sedtmpl s 1) s/) *(/) + (/g;"
+      echo $value | sed "$template" | bc
+    fi
+  fi
+  set +f
+}
+
 echo 'Starting service...'
 exec varnishd -F -f $VARNISH_CONFIG \
   -S $VARNISH_ADMIN_SECRET_FILE \
@@ -14,4 +36,13 @@ exec varnishd -F -f $VARNISH_CONFIG \
   -a 0.0.0.0:$VARNISH_PORT \
   -T 0.0.0.0:$VARNISH_ADMIN_PORT \
   -p feature=+http2 \
+  -p default_grace=$(durationToSeconds $VARNISH_CACHE_GRACE) \
+  -p default_keep=$(durationToSeconds 10m) \
+  -p default_ttl=$(durationToSeconds $VARNISH_CACHE_TTL) \
+  -p backend_idle_timeout=65 \
+  -p timeout_idle=30 \
+  -p http_resp_hdr_len=32768 \
+  -p http_resp_size=262144 \
+  -p shortlived=360 \
+  -p workspace_backend=128k \
   $VARNISH_RUNTIME_PARAMETERS
