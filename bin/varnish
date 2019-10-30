@@ -9,7 +9,7 @@ fi
 
 function durationToSeconds () {
   set -f
-  normalize () { echo $1 | tr '[:upper:]' '[:lower:]' | tr -d "\"\\\'" | sed 's/ *y\(ear\)\{0,1\} */y /g; s/ *d\(ay\)\{0,1\} */d /g; s/ *h\(our\)\{0,1\} */h /g; s/ *m\(in\(ute\)\{0,1\}\)\{0,1\} */m /g; s/ *s\(ec\(ond\)\{0,1\}\)\{0,1\} */s /g; s/\([ydhms]\)s/\1/g'; }
+  normalize () { echo $1 | tr '[:upper:]' '[:lower:]' | tr -d "\"\\\'" | sed 's/ *\(years\|year\|y\) */y /g; s/ *\(days\|day\|d\) */d /g; s/ *\(hours\|hour\|h\) */h /g; s/ *\(minutes\|minute\|min\|m\) */m /g; s/ *\(seconds\|second\|sec\|s\) */s /g; s/\([a-z]\) s/\1 /g;'; }
   local value=$(normalize "$1")
   local fallback=$(normalize "$2")
 
