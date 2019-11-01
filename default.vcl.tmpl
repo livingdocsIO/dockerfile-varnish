@@ -4,6 +4,17 @@ import std;
 import directors;
 import xkey;
 
+{{ if eq (getenv "BACKEND_PROBE") "true" }}
+probe delivery_probe {
+  .url = "{{ getenv "BACKEND_PROBE_URL" }}";
+  .interval = {{ getenv "BACKEND_PROBE_INTERVAL" }};
+  .timeout = {{ getenv "BACKEND_PROBE_TIMEOUT" }};
+  .window = {{ getenv "BACKEND_PROBE_WINDOW" }};
+  .threshold = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
+  .initial = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
+}
+{{ end }}
+
 {{ $BACKENDS := (split (getenv "BACKEND") ",") }}
 {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
 
@@ -21,16 +32,7 @@ backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
   .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" }}; # How long to wait before we receive a first byte from our backend?
   .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" }};  # Max time to wait for next package in an http response
   .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" }};  # How long to wait for a backend connection?
-  {{ if eq (getenv "BACKEND_PROBE") "true" }}
-  .probe = {
-    .url = "{{ getenv "BACKEND_PROBE_URL" }}";
-    .interval = {{ getenv "BACKEND_PROBE_INTERVAL" }};
-    .timeout = {{ getenv "BACKEND_PROBE_TIMEOUT" }};
-    .window = {{ getenv "BACKEND_PROBE_WINDOW" }};
-    .threshold = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
-    .initial = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
-  }
-  {{ end }}
+  {{ if eq (getenv "BACKEND_PROBE") "true" }}.probe = delivery_probe;{{ end }}
 }
   {{ end }}
 {{ end }}
