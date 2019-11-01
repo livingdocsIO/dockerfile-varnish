@@ -18,6 +18,28 @@ probe delivery_probe {
 {{ $BACKENDS := (split (getenv "BACKEND") ",") }}
 {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
 
+{{ $ERROR_PAGE := getenv "ERROR_PAGE" "" }}
+{{ $ERROR_PAGE_SEG := split $ERROR_PAGE "/" }}
+{{ $IS_ERROR_PAGE_REMOTE := eq "http:" (index $ERROR_PAGE_SEG 0) }}
+{{ define "ERROR_PAGE_PATH" -}}
+  {{- $ERROR_PAGE := getenv "ERROR_PAGE" "" -}}
+  {{- $ERROR_PAGE_SEG := split $ERROR_PAGE "/" -}}
+  {{- $IS_ERROR_PAGE_REMOTE := eq "http:" (index $ERROR_PAGE_SEG 0) -}}
+  {{- if $IS_ERROR_PAGE_REMOTE -}}
+    {{- replace $ERROR_PAGE (printf "http://%s" (index $ERROR_PAGE_SEG 2)) "" 1 -}}
+  {{- else -}}
+    {{- $ERROR_PAGE -}}
+  {{- end -}}
+{{- end -}}
+
+{{ if $IS_ERROR_PAGE_REMOTE }}
+backend backend_error {
+  {{- $backend := (split (index $ERROR_PAGE_SEG 2) ":") }}
+  .host = "{{ index $ERROR_PAGE_SEG 2 }}";
+  .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
+}
+{{ end }}
+
 {{ range $backendIndex, $hostnameWithPort := $BACKENDS }}
   {{- $backend := (split $hostnameWithPort ":") }}
   {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
@@ -69,26 +91,6 @@ sub vcl_init {
 }
 
 sub vcl_recv {
-  # Called at the beginning of a request, after the complete request has been
-  # received and parsed.
-  # Its purpose is to decide whether or not to serve the request, how to do it,
-  # and, if applicable, which backend to use. Also used to modify the request.
-
-  set req.backend_hint = delivery.backend();
-
-  {{ if (getenv "REMOTE_BACKEND") }}
-    {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
-      {{- $backend := (split $hostnameWithPort ":") }}
-      {{- $hostname := (index $backend 0) }}
-
-      {{ range $ipIndex, $ip := lookupIP $hostname }}
-  if (req.http.host == "{{ $hostname }}") {
-    set req.backend_hint = remote_{{ $backendIndex }}_{{ $ipIndex }};
-  }
-      {{ end }}
-    {{ end }}
-  {{ end }}
-
   # Allow purging
   if (req.method == "PURGE") {
     # purge is an ACL defined above, we check the ip is in there
@@ -101,6 +103,29 @@ sub vcl_recv {
       return (synth(200, "Invalidated "+req.http.n-gone+" objects"));
     } else {
       return (purge);
+    }
+  }
+
+  if (req.http.Error-Status) {
+    set req.http.host = "error";
+    {{ if $ERROR_PAGE }}set req.url = "{{ template "ERROR_PAGE_PATH" }}";{{ end }}
+    set req.backend_hint = {{ if $IS_ERROR_PAGE_REMOTE }}backend_error{{ else }}delivery.backend(){{ end }};
+  } else {
+    {{ if (getenv "REMOTE_BACKEND") }}
+      {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
+        {{- $backend := (split $hostnameWithPort ":") }}
+        {{- $hostname := (index $backend 0) }}
+
+    if (req.http.host == "{{ $hostname }}") {
+        {{ range $ipIndex, $ip := lookupIP $hostname }}
+      set req.backend_hint = remote_{{ $backendIndex }}_{{ $ipIndex }};
+        {{ end }}
+    }
+      {{ end }}
+    {{ end }}
+
+    if (!req.backend_hint) {
+      set req.backend_hint = delivery.backend();
     }
   }
 
@@ -126,12 +151,14 @@ sub vcl_recv {
 
   # Nuke all cookies
   unset req.http.Cookie;
+  unset req.http.X-Cache;
 
   return (hash);
 }
 
 // Websocket support
 sub vcl_pipe {
+  set req.http.X-Cache = "pipe";
   if (req.http.upgrade) {
     set bereq.http.upgrade = req.http.upgrade;
     set bereq.http.connection = req.http.connection;
@@ -155,9 +182,19 @@ sub vcl_hash {
   hash_data(req.url);
 }
 
+sub vcl_backend_fetch {
+  if (bereq.retries > 0) {
+    if (bereq.http.host == "error") { set bereq.backend = {{ if $IS_ERROR_PAGE_REMOTE }}backend_error{{ else }}delivery.backend(){{ end }}; }
+    else { set bereq.backend = delivery.backend(); }
+  }
+  return (fetch);
+}
+
 # Handle the HTTP request coming from our backend
 # Called after the response headers has been successfully retrieved from the backend.
 sub vcl_backend_response {
+  if (bereq.uncacheable) { return (deliver); }
+
   # We don't use any cookies, remove them to prevent security issues
   unset beresp.http.Set-Cookie;
 
@@ -181,11 +218,25 @@ sub vcl_backend_response {
     set beresp.do_stream = true;
   }
 
-  # Directly pass 50x responses to vcl_backend_error
-  if (beresp.status >= 500) {
+  # Directly pass 50x responses to handle_request_errors
+  if (beresp.status >= 500 && beresp.status <= 504) {
     if (bereq.is_bgfetch) { return (abandon); }
     if (bereq.retries < 1) { return (retry); }
+
+    {{ if $ERROR_PAGE }}
+    if (bereq.http.host == "error") { return (abandon); }
     set beresp.ttl = 15s;
+    set beresp.http.Restart-With-Error-Status = beresp.status;
+    return (deliver);
+    {{ else }}
+    set beresp.ttl = 15s;
+    return (deliver);
+    {{ end }}
+  }
+
+  if (bereq.http.host == "error") {
+    set beresp.grace = 30d;
+    set beresp.ttl = 5m;
     return (deliver);
   }
 
@@ -202,6 +253,13 @@ sub vcl_backend_response {
 
 # Called before a cached/fresh object is delivered to the client.
 sub vcl_deliver {
+  if (resp.http.Restart-With-Error-Status) {
+    set req.http.Error-Status = resp.http.Restart-With-Error-Status;
+    return (restart);
+  } else if (req.http.host == "error") {
+    set resp.status = std.integer(req.http.Error-Status, 500);
+  }
+
   # Add Cache Grace Info to Response (set in vcl_hit)
   if (req.http.X-Cache-Grace) { set resp.http.X-Cache-Grace = req.http.X-Cache-Grace; }
   else { set resp.http.X-Cache-Grace = "NONE"; }
@@ -260,11 +318,26 @@ sub vcl_purge {
 sub vcl_backend_error {
   if (bereq.is_bgfetch) { return (abandon); }
   if (bereq.retries < 1) { return (retry); }
+
+  {{ if $ERROR_PAGE }}
+  if (bereq.http.host == "error") { return (abandon); }
   set beresp.ttl = 15s;
-  return (fail);
+  set beresp.http.Restart-With-Error-Status = beresp.status;
+  return (deliver);
+  {{ else }}
+  set beresp.ttl = 15s;
+  set beresp.grace = 0s;
+  return (retry);
+  {{ end }}
 }
 
 sub vcl_synth {
+  if (resp.status == 503 && req.http.host != "error") {
+    if (resp.http.Restart-With-Error-Status) {set req.http.Error-Status = resp.http.Restart-With-Error-Status;}
+    else {set req.http.Error-Status = resp.status;}
+    return(restart);
+  }
+
   if (req.http.Content-Type ~ "application/json") {
     set resp.http.Content-Type = "application/json; charset=utf-8";
     synthetic(regsub(regsub(regsuball("{'status':_s,'error':'_e'}", "'", {"""}), "_s", resp.status), "_e", resp.reason));
