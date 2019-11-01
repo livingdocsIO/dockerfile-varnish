@@ -20,13 +20,10 @@ probe delivery_probe {
 
 {{ range $backendIndex, $hostnameWithPort := $BACKENDS }}
   {{- $backend := (split $hostnameWithPort ":") }}
-  {{- $hostname := (index $backend 0) }}
-  {{- $port := (index $backend 1) }}
-
-  {{ range $ipIndex, $ip := lookupIP $hostname }}
-backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
+  {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
+backend backend_delivery_{{ $backendIndex }}_{{ $ipIndex }} {
   .host = "{{ $ip }}";
-  .port = "{{ $port }}";
+  .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
 
   .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" }};
   .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" }}; # How long to wait before we receive a first byte from our backend?
@@ -40,14 +37,12 @@ backend backend_{{ $backendIndex }}_{{ $ipIndex }} {
 {{ if (getenv "REMOTE_BACKEND") }}
   # Remote backends are unmonitored backends that only
   {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
-    {{- $backend := (split $hostnameWithPort ":") }}
-    {{- $hostname := (index $backend 0) }}
-    {{- $port := (index $backend 1) }}
+    {{ $backend := (split $hostnameWithPort ":") }}
 
-    {{ range $ipIndex, $ip := lookupIP $hostname }}
+    {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
 backend remote_{{ $backendIndex }}_{{ $ipIndex }} {
   .host = "{{ $ip }}";
-  .port = "{{ $port }}";
+  .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
 }
     {{ end }}
   {{ end }}
@@ -67,11 +62,8 @@ sub vcl_init {
   new delivery = directors.round_robin();
   {{- range $backendIndex, $hostnameWithPort := $BACKENDS -}}
     {{- $backend := (split $hostnameWithPort ":") -}}
-    {{- $hostname := (index $backend 0) -}}
-    {{- $port := (index $backend 1) -}}
-
-    {{ range $ipIndex, $ip := lookupIP $hostname }}
-  delivery.add_backend(backend_{{ $backendIndex }}_{{ $ipIndex }});
+    {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
+  delivery.add_backend(backend_delivery_{{ $backendIndex }}_{{ $ipIndex }});
     {{- end -}}
   {{- end }}
 }
