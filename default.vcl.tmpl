@@ -240,7 +240,8 @@ sub vcl_backend_response {
     return (deliver);
   }
 
-  # Directly pass 404 statuses, cache for 5s to throttle requests to a backend
+  # Directly pass 404 statuses, cache for 10s to throttle requests to a backend
+  # Check how we want to invalidate pages. Are 410 responses properly handled?
   if (beresp.status == 404) {
     set beresp.ttl = 10s;
     return (deliver);

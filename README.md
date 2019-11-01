@@ -45,6 +45,7 @@ All configuration is done using environment variables.
 * `BACKEND_PROBE_WINDOW`, optional, default: 3
 * `BACKEND_PROBE_THRESHOLD`, optional, default: 2
 * `REMOTE_BACKEND`, optional, the host:port of additional backends you can use for example with ESI
+* `ERROR_PAGE`, optional, an html page that is shown for every 5xx error instead of the regular server response `/errorpage` or `http://some-error-page/error` (https doesn't work)
 
 ### Prometheus exporter Options
 * `PROMETHEUS_EXPORTER_PORT`, optional, default 9131
