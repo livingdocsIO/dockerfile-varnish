@@ -35,7 +35,7 @@ exec varnishd -F -f $VARNISH_CONFIG \
   -s malloc,$VARNISH_CACHE_SIZE \
   -a 0.0.0.0:$VARNISH_PORT \
   -T 0.0.0.0:$VARNISH_ADMIN_PORT \
-  -p feature=+http2 \
+  -p feature=+http2,+esi_disable_xml_check \
   -p default_grace=$(durationToSeconds $VARNISH_CACHE_GRACE) \
   -p default_keep=$(durationToSeconds $VARNISH_CACHE_KEEP) \
   -p default_ttl=$(durationToSeconds $VARNISH_CACHE_TTL) \
