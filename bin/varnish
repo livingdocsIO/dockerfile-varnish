@@ -37,7 +37,7 @@ exec varnishd -F -f $VARNISH_CONFIG \
   -T 0.0.0.0:$VARNISH_ADMIN_PORT \
   -p feature=+http2 \
   -p default_grace=$(durationToSeconds $VARNISH_CACHE_GRACE) \
-  -p default_keep=$(durationToSeconds 10m) \
+  -p default_keep=$(durationToSeconds $VARNISH_CACHE_KEEP) \
   -p default_ttl=$(durationToSeconds $VARNISH_CACHE_TTL) \
   -p backend_idle_timeout=65 \
   -p timeout_idle=30 \
