@@ -7,7 +7,7 @@ RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go bu
 RUN ls -lisa /go/bin
 
 FROM alpine:3.10
-ENV VARNISH_VERSION=6.3.1-r0
+ENV VARNISH_VERSION=6.3.1-r1
 
 RUN apk add --no-cache tini ca-certificates bind-tools nano curl && \
   apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --no-cache varnish=$VARNISH_VERSION && \
