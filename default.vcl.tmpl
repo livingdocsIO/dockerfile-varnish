@@ -137,8 +137,8 @@ sub vcl_recv {
 
   # Some generic URL cleanup, useful for all templates that follow
   # First remove the Google Analytics added parameters, useless for our backend
-  if (req.url ~ "(\?|&)(gclid|utm_[a-z]+)=") {
-    set req.url = regsuball(req.url, "(gclid|utm_[a-z]+)=[-_A-z0-9+()%.]+&?", "");
+  if (req.url ~ "(\?|&)(dmcid|fbclid|gclid|utm_[a-z]+)=") {
+    set req.url = regsuball(req.url, "(dmcid|fbclid|gclid|utm_[a-z]+)=[-_A-z0-9+()%.]+&?", "");
   }
 
   # Strip a trailing ? if it exists
