@@ -117,7 +117,7 @@ sub vcl_recv {
       set req.http.n-gone = xkey.softpurge(req.http.xkey);
       return (synth(200, "Invalidated "+req.http.n-gone+" objects"));
     } else {
-      return (purge);
+      ban("obj.http.url ~ " + req.url);
     }
   }
 
@@ -202,6 +202,7 @@ sub vcl_backend_fetch {
 # Called after the response headers has been successfully retrieved from the backend.
 sub vcl_backend_response {
   if (bereq.uncacheable) { return (deliver); }
+  set beresp.http.url = req.url;
 
   # We don't use any cookies, remove them to prevent security issues
   unset beresp.http.Set-Cookie;
@@ -288,6 +289,7 @@ sub vcl_deliver {
   }
 
   # Remove some headers
+  unset resp.http.url;
   unset resp.http.Server;
   unset resp.http.X-Varnish;
   unset resp.http.Via;
