@@ -62,7 +62,7 @@ backend backend_delivery_{{ $backendIndex }}_{{ $ipIndex }} {
     {{ $backend := (split $hostnameWithPort ":") }}
 
     {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
-backend remote_{{ $backendIndex }}_{{ $ipIndex }} {
+backend backend_remote_{{ $backendIndex }}_{{ $ipIndex }} {
   .host = "{{ $ip }}";
   .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
 }
@@ -88,6 +88,16 @@ sub vcl_init {
   delivery.add_backend(backend_delivery_{{ $backendIndex }}_{{ $ipIndex }});
     {{- end -}}
   {{- end }}
+
+  {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
+  new remote_{{ $backendIndex }} = directors.round_robin();
+    {{- range $backendIndex, $hostnameWithPort := $BACKENDS -}}
+      {{- $backend := (split $hostnameWithPort ":") -}}
+      {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
+  remote_{{ $backendIndex }}.add_backend(backend_remote_{{ $backendIndex }}_{{ $ipIndex }});
+      {{- end -}}
+    {{- end }}
+  {{ end }}
 }
 
 sub vcl_recv {
@@ -110,23 +120,16 @@ sub vcl_recv {
     set req.http.host = "error";
     {{ if $ERROR_PAGE }}set req.url = "{{ template "ERROR_PAGE_PATH" }}";{{ end }}
     set req.backend_hint = {{ if $IS_ERROR_PAGE_REMOTE }}backend_error{{ else }}delivery.backend(){{ end }};
-  } else {
-    {{ if (getenv "REMOTE_BACKEND") }}
-      {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
-        {{- $backend := (split $hostnameWithPort ":") }}
-        {{- $hostname := (index $backend 0) }}
-
-    if (req.http.host == "{{ $hostname }}") {
-        {{ range $ipIndex, $ip := lookupIP $hostname }}
-      set req.backend_hint = remote_{{ $backendIndex }}_{{ $ipIndex }};
-        {{ end }}
-    }
-      {{ end }}
-    {{ end }}
-
-    if (!req.backend_hint) {
-      set req.backend_hint = delivery.backend();
-    }
+  }
+  {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
+    {{- $backend := (split $hostnameWithPort ":") }}
+    {{- $hostname := (index $backend 0) }}
+  else if (req.http.host == "{{ $hostname }}") {
+    set req.backend_hint = ermote_{{ $backendIndex }}.backend();
+  }
+  {{ end }}
+  else {
+    set req.backend_hint = delivery.backend();
   }
 
   # Support websockets
