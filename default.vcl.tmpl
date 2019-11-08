@@ -79,7 +79,7 @@ acl purge {
   "::1";
   "172.17.0.0/24"; # Docker Network range
   {{ range $i, $ipRange := $PURGE_IP_WHITELIST }}
-  "{{ipRange}}";
+  "{{ $ipRange }}";
   {{ end }}
 }
 
@@ -92,6 +92,7 @@ sub vcl_init {
     {{- end -}}
   {{- end }}
 
+{{ if (getenv "REMOTE_BACKEND") }}
   {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
   new remote_{{ $backendIndex }} = directors.round_robin();
     {{- range $backendIndex, $hostnameWithPort := $BACKENDS -}}
@@ -101,6 +102,7 @@ sub vcl_init {
       {{- end -}}
     {{- end }}
   {{ end }}
+{{ end }}
 }
 
 sub vcl_recv {
@@ -109,7 +111,7 @@ sub vcl_recv {
   # Allow purging
   if (req.method == "PURGE") {
     # purge is an ACL defined above, we check the ip is in there
-    if (!req.http.x-real-ip ~ purge) {
+    if (std.ip(req.http.x-real-ip, "0.0.0.0") !~ purge) {
       return (synth(405, "This IP is not allowed to send PURGE requests."));
     }
 
@@ -126,12 +128,14 @@ sub vcl_recv {
     {{ if $ERROR_PAGE }}set req.url = "{{ template "ERROR_PAGE_PATH" }}";{{ end }}
     set req.backend_hint = {{ if $IS_ERROR_PAGE_REMOTE }}backend_error{{ else }}delivery.backend(){{ end }};
   }
+  {{ if (getenv "REMOTE_BACKEND") }}
   {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
     {{- $backend := (split $hostnameWithPort ":") }}
     {{- $hostname := (index $backend 0) }}
   else if (req.http.host == "{{ $hostname }}") {
-    set req.backend_hint = ermote_{{ $backendIndex }}.backend();
+    set req.backend_hint = remote_{{ $backendIndex }}.backend();
   }
+  {{ end }}
   {{ end }}
   else {
     set req.backend_hint = delivery.backend();
@@ -202,7 +206,7 @@ sub vcl_backend_fetch {
 # Called after the response headers has been successfully retrieved from the backend.
 sub vcl_backend_response {
   if (bereq.uncacheable) { return (deliver); }
-  set beresp.http.url = req.url;
+  set beresp.http.url = bereq.url;
 
   # We don't use any cookies, remove them to prevent security issues
   unset beresp.http.Set-Cookie;
@@ -235,12 +239,18 @@ sub vcl_backend_response {
     {{ if $ERROR_PAGE }}
     if (bereq.http.host == "error") { return (abandon); }
     set beresp.ttl = 15s;
-    set beresp.http.Restart-With-Error-Status = beresp.status;
+    set beresp.http.Follow-Error-Status = beresp.status;
     return (deliver);
     {{ else }}
     set beresp.ttl = 15s;
     return (deliver);
     {{ end }}
+  }
+
+  # Upstream applications can respond with an additional header to tell varnish to serve
+  # The page on the same url and cache the redirect
+  if (beresp.http.Follow-Link) {
+    set beresp.http.Follow-Error-Status = beresp.status;
   }
 
   if (bereq.http.host == "error") {
@@ -263,8 +273,8 @@ sub vcl_backend_response {
 
 # Called before a cached/fresh object is delivered to the client.
 sub vcl_deliver {
-  if (resp.http.Restart-With-Error-Status) {
-    set req.http.Error-Status = resp.http.Restart-With-Error-Status;
+  if (resp.http.Follow-Error-Status) {
+    set req.http.Error-Status = resp.http.Follow-Error-Status;
     return (restart);
   } else if (req.http.host == "error") {
     set resp.status = std.integer(req.http.Error-Status, 500);
@@ -328,7 +338,7 @@ sub vcl_backend_error {
   {{ if $ERROR_PAGE }}
   if (bereq.http.host == "error") { return (abandon); }
   set beresp.ttl = 15s;
-  set beresp.http.Restart-With-Error-Status = beresp.status;
+  set beresp.http.Follow-Error-Status = beresp.status;
   return (deliver);
   {{ else }}
   set beresp.ttl = 15s;
@@ -339,7 +349,7 @@ sub vcl_backend_error {
 
 sub vcl_synth {
   if (resp.status == 503 && req.http.host != "error") {
-    if (resp.http.Restart-With-Error-Status) {set req.http.Error-Status = resp.http.Restart-With-Error-Status;}
+    if (resp.http.Follow-Error-Status) {set req.http.Error-Status = resp.http.Follow-Error-Status;}
     else {set req.http.Error-Status = resp.status;}
     return(restart);
   }
