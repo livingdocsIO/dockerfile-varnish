@@ -101,10 +101,12 @@ sub vcl_init {
 }
 
 sub vcl_recv {
+  if (!req.http.x-real-ip) { set req.http.x-real-ip = client.ip; }
+
   # Allow purging
   if (req.method == "PURGE") {
     # purge is an ACL defined above, we check the ip is in there
-    if (!client.ip ~ purge) {
+    if (!req.http.x-real-ip ~ purge) {
       return (synth(405, "This IP is not allowed to send PURGE requests."));
     }
 
