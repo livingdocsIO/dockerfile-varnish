@@ -70,14 +70,17 @@ backend backend_remote_{{ $backendIndex }}_{{ $ipIndex }} {
   {{ end }}
 {{ end }}
 
+{{ $PURGE_IP_WHITELIST := (split (getenv "PURGE_IP_WHITELIST") ",") }}
+
 # allowed to purge
 acl purge {
   "localhost";
   "127.0.0.1";
   "::1";
   "172.17.0.0/24"; # Docker Network range
-  "212.51.140.235"; # Livingdocs
-  "212.51.155.165"; # Marc
+  {{ range $i, $ipRange := $PURGE_IP_WHITELIST }}
+  "{{ipRange}}";
+  {{ end }}
 }
 
 sub vcl_init {
