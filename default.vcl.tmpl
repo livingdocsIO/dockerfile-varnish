@@ -356,6 +356,15 @@ sub vcl_synth {
     if (resp.http.Follow-Error-Status) {set req.http.Error-Status = resp.http.Follow-Error-Status;}
     else {set req.http.Error-Status = resp.status;}
     return(restart);
+  } else if (resp.status == 301) {
+    set resp.http.location = resp.reason;
+    set resp.reason = "Moved Permanently";
+  } else if (resp.status == 302) {
+    set resp.http.location = resp.reason;
+    set resp.reason = "Moved Temporarily";
+  } else if (resp.status == 302) {
+    set resp.http.location = resp.reason;
+    set resp.reason = "Temporary Redirect";
   }
 
   set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}";
@@ -368,7 +377,7 @@ sub vcl_synth {
     synthetic(regsub(regsub(regsuball("{'status':_s,'error':'_e'}", "'", {"""}), "_s", resp.status), "_e", resp.reason));
   } else {
     set resp.http.Content-Type = "text/html; charset=utf-8";
-    synthetic({"<!DOCTYPE html><html><head><title>"} + resp.status + " " + resp.reason + {"</title></head><body><h1>Error "} + resp.status + " " + resp.reason + {"</h1></body></html>"});
+    synthetic({"<!DOCTYPE html><html><head><title>"} + resp.status + " " + resp.reason + {"</title></head><body><h1>"} + resp.status + " " + resp.reason + {"</h1></body></html>"});
   }
 
   return (deliver);
