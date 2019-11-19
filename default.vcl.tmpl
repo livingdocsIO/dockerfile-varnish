@@ -170,6 +170,8 @@ sub vcl_recv {
   unset req.http.Cookie;
   unset req.http.X-Cache;
 
+  {{ getenv "VARNISH_CUSTOM_SCRIPT" "" }}
+
   return (hash);
 }
 
