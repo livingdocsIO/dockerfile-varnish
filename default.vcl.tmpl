@@ -247,12 +247,6 @@ sub vcl_backend_response {
     {{ end }}
   }
 
-  # Upstream applications can respond with an additional header to tell varnish to serve
-  # The page on the same url and cache the redirect
-  if (beresp.http.Follow-Link) {
-    set beresp.http.Follow-Error-Status = beresp.status;
-  }
-
   if (bereq.http.host == "error") {
     set beresp.grace = 30d;
     set beresp.ttl = 5m;
@@ -278,6 +272,9 @@ sub vcl_deliver {
     return (restart);
   } else if (req.http.host == "error") {
     set resp.status = std.integer(req.http.Error-Status, 500);
+  } else if (resp.http.Follow-Location == "true") {
+    set req.url = resp.http.Location;
+    return (restart);
   }
 
   # Add Cache Grace Info to Response (set in vcl_hit)
