@@ -285,8 +285,8 @@ sub vcl_deliver {
   }
 
   # Add Cache Grace Info to Response (set in vcl_hit)
-  if (resp.http.X-Served-By) { set resp.http.X-Served-By = "{{getenv "HOSTNAME"}}, " + resp.http.X-Served-By; }
-  else { set resp.http.X-Served-By = "{{getenv "HOSTNAME"}}"; }
+  if (resp.http.X-Served-By) { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}, " + resp.http.X-Served-By; }
+  else { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}"; }
 
   if (resp.http.X-Cache) { set resp.http.X-Cache = req.http.X-Cache + ", " + resp.http.X-Cache; }
   else { set resp.http.X-Cache = req.http.X-Cache; }
@@ -358,7 +358,7 @@ sub vcl_synth {
     return(restart);
   }
 
-  set resp.http.X-Served-By = "{{getenv "HOSTNAME"}}";
+  set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}";
   set resp.http.X-Cache = "SYNTH";
   unset resp.http.X-Varnish;
   unset resp.http.Server;
