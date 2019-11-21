@@ -1,5 +1,51 @@
-#!/bin/sh
+#!/bin/bash
 set -e
+
+normalize_ips () {
+  echo "${1:-}" | sed -E 's/([0-9.:]+)/"\1"/g' | sed -E 's/\/"([0-9]+)"/\/\1/g'
+}
+
+export VARNISH_ADMIN_SECRET_FILE=${VARNISH_ADMIN_SECRET_FILE:-/etc/varnish/secret}
+export VARNISH_ADMIN_SECRET=${VARNISH_ADMIN_SECRET:-$()}
+export VARNISH_RUNTIME_PARAMETERS=${VARNISH_RUNTIME_PARAMETERS:-}
+
+export VARNISH_CONFIG=${VARNISH_CONFIG:-/etc/varnish/default.vcl}
+export VARNISH_CACHE_SIZE=${VARNISH_CACHE_SIZE:-512m}
+export VARNISH_CACHE_TTL=${VARNISH_CACHE_TTL:-4m}
+export VARNISH_CACHE_GRACE=${VARNISH_CACHE_GRACE:-24h}
+export VARNISH_CACHE_KEEP=${VARNISH_CACHE_KEEP:-1h}
+
+export VARNISH_STRIP_QUERYSTRING=${VARNISH_STRIP_QUERYSTRING:-false}
+export VARNISH_CUSTOM_SCRIPT=${VARNISH_CUSTOM_SCRIPT:-}
+
+export BACKEND=${BACKEND:-}
+export BACKEND_MAX_CONNECTIONS=${BACKEND_MAX_CONNECTIONS:-75}
+export BACKEND_CONNECT_TIMEOUT=${BACKEND_CONNECT_TIMEOUT:-0.7s}
+export BACKEND_FIRST_BYTES_TIMEOUT=${BACKEND_FIRST_BYTES_TIMEOUT:-30s}
+export BACKEND_BETWEEN_BYTES_TIMEOUT=${BACKEND_BETWEEN_BYTES_TIMEOUT:-30s}
+export BACKEND_PROBE=${BACKEND_PROBE:-false}
+export BACKEND_PROBE_URL=${BACKEND_PROBE_URL:-/status}
+export BACKEND_PROBE_INTERVAL=${BACKEND_PROBE_INTERVAL:-2s}
+export BACKEND_PROBE_TIMEOUT=${BACKEND_PROBE_TIMEOUT:-1s}
+export BACKEND_PROBE_WINDOW=${BACKEND_PROBE_WINDOW:-3}
+export BACKEND_PROBE_THRESHOLD=${BACKEND_PROBE_THRESHOLD:-2}
+export REMOTE_BACKEND=${REMOTE_BACKEND:-}
+export PURGE_IP_WHITELIST=$(normalize_ips "${PURGE_IP_WHITELIST:-212.51.140.235,85.195.241.146}")
+
+if [ ! -f $VARNISH_ADMIN_SECRET_FILE ]; then
+  if [ "$VARNISH_ADMIN_SECRET" != "" ]; then
+    echo $VARNISH_ADMIN_SECRET > $VARNISH_ADMIN_SECRET_FILE
+  else
+    dd if=/dev/random of=$VARNISH_ADMIN_SECRET_FILE count=1
+  fi
+fi
+
 /bin/varnish-reload-synconly
 
-EXITD_NO_LOG_PREFIX=first exitd /bin/varnish-logs /bin/varnish /bin/varnish-reload-watch /bin/prometheus-varnish-exporter
+/bin/varnish-logs &
+/bin/varnish-reload-watch &
+/bin/prometheus-varnish-exporter &
+/bin/varnish &
+
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+wait -n

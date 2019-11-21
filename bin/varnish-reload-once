@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /bin/confd --onetime --backend env
+exec /bin/confd --onetime --backend env 1>&2

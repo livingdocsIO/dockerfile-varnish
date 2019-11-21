@@ -30,7 +30,7 @@ All configuration is done using environment variables.
 * `VARNISH_CACHE_TTL`, optional, default: 4m
 * `VARNISH_CACHE_GRACE`, optional, default: 24h
 * `VARNISH_CACHE_KEEP`, optional, default: 1h
-* `VARNISH_RUNTIME_PARAMETERS`, optional, default: `-p timeout_idle=65`
+* `VARNISH_RUNTIME_PARAMETERS`, optional
 
 ### Varnish Backend Options
 * `BACKEND` the hostname:port of the backend, supports comma delimited values
@@ -45,7 +45,16 @@ All configuration is done using environment variables.
 * `BACKEND_PROBE_WINDOW`, optional, default: 3
 * `BACKEND_PROBE_THRESHOLD`, optional, default: 2
 * `REMOTE_BACKEND`, optional, the host:port of additional backends you can use for example with ESI
-* `ERROR_PAGE`, optional, an html page that is shown for every 5xx error instead of the regular server response `/errorpage` or `http://some-error-page/error` (https doesn't work)
+
+### VCL Configuration Options
+* `ERROR_PAGE`, optional, an html page that is shown for every 5xx error instead of the regular server response. You can set it to something like `/error` or `http://some-error-page/error?code={{code}}`
+  - Attention, https doesn't work
+  - Use a `{{code}}` placeholder, which will be replaced with the error code.
+* `PURGE_IP_WHITELIST`: a list of ip addresses that are allowed to purge pages. by default we've whitelisted the private networks.
+* `VARNISH_STRIP_QUERYSTRING`: Forces varnish to remove all the query strings from a url before it gets sent to a backend, default: false
+* `HOSTNAME` and `HOSTNAME_PREFIX`: By default we set a `x-served-by` header on the response of a request in varnish. Because the hostname is automatically set in docker, we've added a prefix, to make it more customizable.
+* `VARNISH_CUSTOM_SCRIPT`: Allows us to inject some script at the end of the `vcl_recv` function.
+
 
 ### Prometheus exporter Options
 * `PROMETHEUS_EXPORTER_PORT`, optional, default 9131
