@@ -1,48 +1,18 @@
 #!/bin/sh
-if [ ! -f $VARNISH_ADMIN_SECRET_FILE ]; then
-  if [ -z "$VARNISH_ADMIN_SECRET" ]; then
-    echo $VARNISH_ADMIN_SECRET > $VARNISH_ADMIN_SECRET_FILE
-  else
-    dd if=/dev/random of=$VARNISH_ADMIN_SECRET_FILE count=1
-  fi
-fi
-
-function durationToSeconds () {
-  set -f
-  normalize () { echo $1 | tr '[:upper:]' '[:lower:]' | tr -d "\"\\\'" | sed 's/ *\(years\|year\|y\) */y /g; s/ *\(days\|day\|d\) */d /g; s/ *\(hours\|hour\|h\) */h /g; s/ *\(minutes\|minute\|min\|m\) */m /g; s/ *\(seconds\|second\|sec\|s\) */s /g; s/\([a-z]\) s/\1 /g;'; }
-  local value=$(normalize "$1")
-  local fallback=$(normalize "$2")
-
-  echo $value | grep -v '^[-+*/0-9ydhms ]\{0,30\}$' > /dev/null 2>&1
-  if [ $? -eq 0 ]
-  then
-    >&2 echo Invalid duration pattern \"$value\"
-  else
-    if [ "$value" = "" ]; then
-      [ "$fallback" != "" ] && durationToSeconds "$fallback"
-    else
-      sedtmpl () { echo "s/\([0-9]\+\)$1/(0\1 * $2)/g;"; }
-      local template="$(sedtmpl '\( \|$\)' 1) $(sedtmpl y '365 * 86400') $(sedtmpl d 86400) $(sedtmpl h 3600) $(sedtmpl m 60) $(sedtmpl s 1) s/) *(/) + (/g;"
-      echo $value | sed "$template" | bc
-    fi
-  fi
-  set +f
-}
-
-echo 'Starting service...'
+set -e
 exec varnishd -F -f $VARNISH_CONFIG \
   -S $VARNISH_ADMIN_SECRET_FILE \
   -s malloc,$VARNISH_CACHE_SIZE \
   -a 0.0.0.0:$VARNISH_PORT \
   -T 0.0.0.0:$VARNISH_ADMIN_PORT \
   -p feature=+http2,+esi_disable_xml_check \
-  -p default_grace=$(durationToSeconds $VARNISH_CACHE_GRACE) \
-  -p default_keep=$(durationToSeconds $VARNISH_CACHE_KEEP) \
-  -p default_ttl=$(durationToSeconds $VARNISH_CACHE_TTL) \
+  -p default_grace=$(duration $VARNISH_CACHE_GRACE) \
+  -p default_keep=$(duration $VARNISH_CACHE_KEEP) \
+  -p default_ttl=$(duration $VARNISH_CACHE_TTL) \
   -p backend_idle_timeout=65 \
-  -p timeout_idle=30 \
+  -p timeout_idle=60 \
   -p http_resp_hdr_len=32768 \
   -p http_resp_size=262144 \
   -p shortlived=360 \
   -p workspace_backend=128k \
-  $VARNISH_RUNTIME_PARAMETERS
+  $VARNISH_RUNTIME_PARAMETERS 1>&2

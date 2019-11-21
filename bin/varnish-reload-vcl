@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 FILE=$VARNISH_CONFIG
 ADMIN=localhost:$VARNISH_ADMIN_PORT
 NAME="varnish_$(date +%s)"
@@ -9,9 +10,9 @@ function error () {
 }
 
 varnishadm() {
-  if ! OUTPUT=$(command varnishadm -T $ADMIN -S /etc/varnish/secret -- "$@" 2>&1)
+  if ! OUTPUT=$(command varnishadm -T $ADMIN -S $VARNISH_ADMIN_SECRET_FILE -- "$@" 2>&1)
   then
-    echo "Command: varnishadm -T $ADMIN -S /etc/varnish/secret -- $*"
+    echo "Command: varnishadm -T $ADMIN -S $VARNISH_ADMIN_SECRET_FILE -- $*"
     echo
     echo "$OUTPUT"
     echo
@@ -21,10 +22,8 @@ varnishadm() {
 }
 
 varnishadm vcl.load $NAME $FILE || error "Failed to vcl.load $FILE."
-sleep 5
-
 varnishadm vcl.use $NAME || error "Failed to vcl.use $FILE."
-sleep 5
+sleep 10
 
 INACTIVE_VCLS=$(varnishadm vcl.list | awk '/(auto|cold)\/cold/ {print $4}') || error "Failed to get the vcl list."
 for vclname in $INACTIVE_VCLS; do
