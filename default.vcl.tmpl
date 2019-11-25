@@ -1,8 +1,13 @@
+{{- define "vstr" -}}
+"{{ replace (replace (replace . `"` `" + {"""} + "` -1) `${` `" +` -1) `}$` `+ "` -1}}"
+{{- end }}
+
 vcl 4.1;
 
 import std;
 import directors;
 import xkey;
+import var;
 
 {{ if eq (getenv "BACKEND_PROBE") "true" }}
 probe delivery_probe {
@@ -88,6 +93,8 @@ acl purge {
 }
 
 sub vcl_init {
+  var.global_set("health", "200");
+
   new delivery = directors.round_robin();
   {{- range $backendIndex, $hostnameWithPort := $BACKENDS -}}
     {{- $backend := (split $hostnameWithPort ":") -}}
@@ -110,6 +117,20 @@ sub vcl_init {
 }
 
 sub vcl_recv {
+  if (req.url == "/_health") {
+    set req.http.status = var.global_get("health");
+
+    if (req.method == "POST") {
+      if (client.ip ~ purge) {
+        var.global_set("health", req.http.health);
+      } else {
+        return (synth(405, "The IP '" + client.ip + "' is not allowed to send a POST /_health request."));
+      }
+    }
+
+    return (synth(222, req.http.status));
+  }
+
   # Allow purging
   if (req.method == "BAN") {
     # purge is an ACL defined above, we check the ip is in there
@@ -355,16 +376,15 @@ sub vcl_synth {
   if (resp.status == 503 && req.http.host != "error") {
     if (resp.http.Follow-Error-Status) {set req.http.Error-Status = resp.http.Follow-Error-Status;}
     else {set req.http.Error-Status = resp.status;}
-    return(restart);
+    return (restart);
   } else if (resp.status == 301) {
     set resp.http.location = resp.reason;
-    set resp.reason = "Moved Permanently";
   } else if (resp.status == 302) {
     set resp.http.location = resp.reason;
-    set resp.reason = "Moved Temporarily";
   } else if (resp.status == 307) {
     set resp.http.location = resp.reason;
-    set resp.reason = "Temporary Redirect";
+  } else if (resp.status == 222) {
+    set resp.status = std.integer(resp.reason, 503);
   }
 
   set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}";
@@ -374,10 +394,13 @@ sub vcl_synth {
 
   if (req.http.Content-Type ~ "application/json") {
     set resp.http.Content-Type = "application/json; charset=utf-8";
-    synthetic(regsub(regsub(regsuball("{'status':_s,'error':'_e'}", "'", {"""}), "_s", resp.status), "_e", resp.reason));
-  } else {
+    set resp.body = {{ template "vstr" `{"status":${resp.status}$,"error":"${resp.reason}$"}`}};
+  } else if (req.http.Content-Type ~ "text/html") {
     set resp.http.Content-Type = "text/html; charset=utf-8";
-    synthetic({"<!DOCTYPE html><html><head><title>"} + resp.status + " " + resp.reason + {"</title></head><body><h1>"} + resp.status + " " + resp.reason + {"</h1></body></html>"});
+    set resp.body = {{ template "vstr" `<!DOCTYPE html><html><head><title>${resp.status}$ ${resp.reason}$</title></head><body><h1>${resp.status}$ ${resp.reason}$</h1></body></html>`}};
+  } else {
+    set resp.http.Content-Type = "text/plain; charset=utf-8";
+    set resp.body = {{ template "vstr" `${resp.status}$ ${resp.reason}$` }};
   }
 
   return (deliver);
