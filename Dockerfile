@@ -8,7 +8,7 @@ RUN ls -lisa /go/bin
 FROM alpine:3.10
 ENV VARNISH_VERSION=6.3.1-r1
 
-RUN apk add --no-cache bash tini ca-certificates bind-tools nano curl && \
+RUN apk add --no-cache bash ca-certificates bind-tools nano curl tini procps && \
   apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --no-cache varnish=$VARNISH_VERSION && \
   apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --virtual build-dependencies --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
     && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.3' --single-branch /varnish-modules \
@@ -32,5 +32,5 @@ COPY ./bin/* /bin/
 EXPOSE $VARNISH_PORT
 EXPOSE $VARNISH_ADMIN_PORT
 EXPOSE $PROMETHEUS_EXPORTER_PORT
-ENTRYPOINT ["/sbin/tini", "-g", "--"]
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["/entrypoint.sh"]

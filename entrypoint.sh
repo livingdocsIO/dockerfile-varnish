@@ -42,10 +42,54 @@ fi
 
 /bin/varnish-reload-synconly
 
-/bin/varnish-logs &
-/bin/varnish-reload-watch &
-/bin/prometheus-varnish-exporter &
-/bin/varnish &
+SIGNAL=
+EXITCODE=
+PROCESS=
+PROCESSES=()
+PROCESSES_PIDS=()
+PROCESSES_IDX=()
+PROCESSES_EARLY_KILL=()
 
-trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+track () {
+  $1 &
+  local pid="$!"
+  PROCESSES+=("$1")
+  PROCESSES_PIDS+=($pid)
+  PROCESSES_IDX+=("${#PROCESSES_IDX[@]}")
+  [ "$2" == "KILL_BEFORE_EXIT" ] && PROCESSES_EARLY_KILL+=($pid)
+}
+
+exited_process_name () {
+  for idx in "${PROCESSES_IDX[@]}"; do
+    local found=$(ps -p "${PROCESSES_PIDS[idx]}" -o pid= || echo)
+    if [ "$found" == "" ]; then echo "${PROCESSES[idx]}" && return 0; fi
+  done
+  return 0
+}
+
+kill_processes () {
+  trap - SIGTERM SIGINT
+  if [ "$SIGNAL" == "" ]; then SIGNAL="$1"; EXITCODE="${2:-0}" PROCESS="$(exited_process_name)"; fi
+
+  local pid_to_kill="$PROCESSES_EARLY_KILL[@]"
+  [ "$pid_to_kill" != "" ] && kill $pid_to_kill 2> /dev/null || true
+}
+
+trap 'kill_processes SIGTERM' SIGTERM
+trap 'kill_processes SIGINT' SIGINT
+
+set +e
+track /bin/varnish
+track /bin/varnish-logs
+track /bin/prometheus-varnish-exporter
+track /bin/varnish-reload-watch KILL_BEFORE_EXIT
+
 wait -n
+kill_processes ERROR "$?"
+
+[ "$SIGNAL" != "ERROR" ] && >&2 echo EXITING with $SIGNAL
+[ "$SIGNAL" == "ERROR" ] && >&2 echo EXITING because of ERROR in $PROCESS with code $EXITCODE
+GRACEFUL="$(curl -XPOST -H 'health: 503' http://localhost:$VARNISH_PORT/_health 2> /dev/null || true)"
+if [ "$GRACEFUL" == "200 OK" ]; then sleep 4; fi
+kill $(jobs -p) 2>/dev/null || true
+exit $EXITCODE

@@ -1,4 +1,5 @@
 [template]
+log-level = "error"
 src = "varnish.vcl.tmpl"
 dest = "/etc/varnish/default.vcl"
 check_cmd = "varnishd -C -f {{.src}}"

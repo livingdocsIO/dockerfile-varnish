@@ -5,28 +5,28 @@ ADMIN=localhost:$VARNISH_ADMIN_PORT
 NAME="varnish_$(date +%s)"
 
 function error () {
-  echo 1>&2 $1
+  >&2 echo $1
   exit 1
 }
 
 varnishadm() {
   if ! OUTPUT=$(command varnishadm -T $ADMIN -S $VARNISH_ADMIN_SECRET_FILE -- "$@" 2>&1)
   then
-    echo "Command: varnishadm -T $ADMIN -S $VARNISH_ADMIN_SECRET_FILE -- $*"
-    echo
-    echo "$OUTPUT"
-    echo
+    >&2 echo "Command: varnishadm -T $ADMIN -S $VARNISH_ADMIN_SECRET_FILE -- $*"
+    >&2 echo
+    >&2 echo "$OUTPUT"
+    >&2 echo
     return 1
   fi >&2
   echo "$OUTPUT"
 }
 
-varnishadm vcl.load $NAME $FILE || error "Failed to vcl.load $FILE."
-varnishadm vcl.use $NAME || error "Failed to vcl.use $FILE."
+>&2 varnishadm vcl.load $NAME $FILE || error "Failed to vcl.load $FILE."
+>&2 varnishadm vcl.use $NAME || error "Failed to vcl.use $FILE."
 sleep 10
 
 INACTIVE_VCLS=$(varnishadm vcl.list | awk '/(auto|cold)\/cold/ {print $4}') || error "Failed to get the vcl list."
 for vclname in $INACTIVE_VCLS; do
-  echo "Call varnishadm vcl.discard $vclname"
+  >&2 echo "Call varnishadm vcl.discard $vclname"
   varnishadm vcl.discard $vclname 1>/dev/null || error "Failed to vcl.discard $vclname."
 done;
