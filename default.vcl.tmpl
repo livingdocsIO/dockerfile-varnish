@@ -134,8 +134,8 @@ sub vcl_recv {
   # Allow purging
   if (req.method == "BAN") {
     # purge is an ACL defined above, we check the ip is in there
-    if (std.ip(req.http.x-forwarded-for, "0.0.0.0") !~ purge) {
-      return (synth(405, "The IP '" + req.http.x-forwarded-for + "' is not allowed to send BAN requests."));
+    if (client.ip !~ purge) {
+      return (synth(405, "The IP '" + client.ip + "' is not allowed to send BAN requests."));
     }
 
     if (req.http.xkey) {
