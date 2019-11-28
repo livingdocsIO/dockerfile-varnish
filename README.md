@@ -11,7 +11,7 @@ docker build -t livingdocs/varnish .
 ### Run
 
 ```
-docker run --rm -it -e BACKEND=example.com:80 -e BACKEND_PROBE=false -p 8080:80 -p 6081:6081 --name varnish livingdocs/varnish
+docker run --rm -it -e BACKEND=example.com:80 -p 8080:80 -p 6081:6081 --name varnish livingdocs/varnish
 
 # test
 curl -H 'Host: example.com' localhost:8080
@@ -38,7 +38,7 @@ All configuration is done using environment variables.
 * `BACKEND_FIRST_BYTES_TIMEOUT`, optional, default: 10s
 * `BACKEND_BETWEEN_BYTES_TIMEOUT`, optional, default: 5s
 * `BACKEND_CONNECT_TIMEOUT`, optional, default: 5s
-* `BACKEND_PROBE`, optional, default: true
+* `BACKEND_PROBE`, optional, default: false
 * `BACKEND_PROBE_URL`, optional, default: /status
 * `BACKEND_PROBE_INTERVAL`, optional, default: 1s
 * `BACKEND_PROBE_TIMEOUT`, optional, default: 1s
