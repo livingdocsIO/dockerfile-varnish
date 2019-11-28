@@ -17,6 +17,7 @@ export VARNISH_CACHE_KEEP=${VARNISH_CACHE_KEEP:-1h}
 
 export VARNISH_STRIP_QUERYSTRING=${VARNISH_STRIP_QUERYSTRING:-false}
 export VARNISH_CUSTOM_SCRIPT=${VARNISH_CUSTOM_SCRIPT:-}
+export VARNISH_SHUTDOWN_DELAY=${VARNISH_SHUTDOWN_DELAY:-5}
 
 export BACKEND=${BACKEND:-}
 export BACKEND_MAX_CONNECTIONS=${BACKEND_MAX_CONNECTIONS:-75}
@@ -90,6 +91,6 @@ kill_processes ERROR "$?"
 [ "$SIGNAL" != "ERROR" ] && >&2 echo EXITING with $SIGNAL
 [ "$SIGNAL" == "ERROR" ] && >&2 echo EXITING because of ERROR in $PROCESS with code $EXITCODE
 GRACEFUL="$(curl -XPOST -H 'health: 503' http://localhost:$VARNISH_PORT/_health 2> /dev/null || true)"
-if [ "$GRACEFUL" == "200 OK" ]; then sleep 4; fi
+if [ "$GRACEFUL" == "200 OK" ]; then sleep $VARNISH_SHUTDOWN_DELAY; fi
 kill $(jobs -p) 2>/dev/null || true
 exit $EXITCODE
