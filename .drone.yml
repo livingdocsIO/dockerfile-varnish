@@ -8,9 +8,9 @@ steps:
   settings:
     dry_run: true
     username:
-      from_secret: docker_username
+      from_secret: DOCKER_USERNAME
     password:
-      from_secret: docker_password
+      from_secret: DOCKER_PASSWORD
     repo: livingdocs/varnish
     tags: [6.3.2-r0, latest]
 
@@ -18,12 +18,11 @@ steps:
   image: plugins/docker
   settings:
     username:
-      from_secret: docker_username
+      from_secret: DOCKER_USERNAME
     password:
-      from_secret: docker_password
+      from_secret: DOCKER_PASSWORD
     repo: livingdocs/varnish
     tags: [6.3.2-r0, latest]
-
   when:
     branch: [master]
 
@@ -32,6 +31,6 @@ trigger:
 
 ---
 kind: signature
-hmac: 3632633649db904513637dd5510b55e32909df6ea1c46abdcd9bb5ade6127396
+hmac: e00a1d00c4b07a5e1c92c4633f3f3a78806ac9596deea263c5a08b4fa8198026
 
 ...
