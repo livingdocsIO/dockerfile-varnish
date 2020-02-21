@@ -117,7 +117,10 @@ sub vcl_init {
 }
 
 sub vcl_recv {
-  if (req.url == "/_health") {
+  if (req.url == "/favicon.ico" || req.url == "/status") {
+    std.log("nolog:true");
+  } else if (req.url == "/_health") {
+    std.log("nolog:true");
     set req.http.status = var.global_get("health");
 
     if (req.method == "POST") {
