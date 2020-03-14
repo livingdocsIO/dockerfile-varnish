@@ -1,12 +1,16 @@
 #!/bin/bash
 set -em
 
+log () {
+  awk '{print strftime("%Y-%m-%dT%H:%M:%SZ",systime()) " [entrypoint]: " $0}' <<<"$@" 1>&2
+}
+
 normalize_ips () {
   echo "${1:-}" | sed -E 's/([0-9.:]+)/"\1"/g' | sed -E 's/\/"([0-9]+)"/\/\1/g'
 }
 
 export VARNISH_ADMIN_SECRET_FILE=${VARNISH_ADMIN_SECRET_FILE:-/etc/varnish/secret}
-export VARNISH_ADMIN_SECRET=${VARNISH_ADMIN_SECRET:-$()}
+export VARNISH_ADMIN_SECRET=${VARNISH_ADMIN_SECRET:-}
 export VARNISH_RUNTIME_PARAMETERS=${VARNISH_RUNTIME_PARAMETERS:-}
 
 export VARNISH_CONFIG=${VARNISH_CONFIG:-/etc/varnish/default.vcl}
@@ -38,11 +42,11 @@ if [ ! -f $VARNISH_ADMIN_SECRET_FILE ]; then
   if [ "$VARNISH_ADMIN_SECRET" != "" ]; then
     echo $VARNISH_ADMIN_SECRET > $VARNISH_ADMIN_SECRET_FILE
   else
-    dd if=/dev/random of=$VARNISH_ADMIN_SECRET_FILE count=1
+    dd if=/dev/random of=$VARNISH_ADMIN_SECRET_FILE count=1 > /dev/null 2>&1
   fi
 fi
 
-/bin/varnish-reload-synconly
+/bin/confd-reload-synconly 1>&2
 
 PROCESSES=()
 PROCESSES_PIDS=()
@@ -59,7 +63,7 @@ track () {
   local ARGS="$(echo $@)"
   local PROCESS=$1
   if [[ " $ARGS " =~ " LOG_TO_STDERR " ]]; then
-    $PROCESS >&2 &
+    $PROCESS 1>&2 &
   else
     $PROCESS &
   fi
@@ -69,7 +73,7 @@ track () {
   PROCESSES_PIDS+=($PID)
   PROCESSES_IDX+=("${#PROCESSES_IDX[@]}")
 
-  >&2 echo STARTED $PROCESS with PID $PID
+  log STARTED $PROCESS with PID $PID
   if [[ " $ARGS " =~ " KILL_BEFORE_EXIT " ]]; then
     KILL_BEFORE_EXIT+=("$PROCESS")
     KILL_BEFORE_EXIT_PIDS+=($PID)
@@ -88,6 +92,10 @@ handle_signal () {
   trap - ERR
   trap '' SIGINT SIGTERM
 
+  # There's always a ^C when we do a manual cancel.
+  # I want to have the next log on the next line, so it looks prettier
+  >&2 echo
+
   if [ "$EXIT_SIGNAL" != "" ]; then return 0; fi
   EXIT_SIGNAL="$1";
   EXIT_CODE="${2:-0}" EXIT_PROCESS="$(exited_process_name)"
@@ -95,9 +103,9 @@ handle_signal () {
 }
 
 handle_shutdown () {
-  [ "$EXIT_SIGNAL" != "SIGKILL" ] && >&2 echo EXITING with $EXIT_SIGNAL
-  [ "$EXIT_SIGNAL" == "SIGKILL" ] && >&2 echo EXITING with ERROR in $EXIT_PROCESS and exit code $EXIT_CODE
-  trap ">&2 echo EXITED with code $EXIT_CODE && exit $EXIT_CODE" EXIT
+  [ "$EXIT_SIGNAL" != "SIGKILL" ] && log EXITING with $EXIT_SIGNAL
+  [ "$EXIT_SIGNAL" == "SIGKILL" ] && log EXITING with ERROR in $EXIT_PROCESS and exit code $EXIT_CODE
+  trap "log EXITED with code $EXIT_CODE && exit $EXIT_CODE" EXIT
 
   if [ ${#KILL_BEFORE_EXIT_PIDS} -ne 0 ]; then
     kill -s $EXIT_SIGNAL $KILL_BEFORE_EXIT_PIDS 2>&1 > /dev/null || true
@@ -105,10 +113,11 @@ handle_shutdown () {
 
   GRACEFUL="$(curl -s -XPOST -H 'health: 503' http://localhost:$VARNISH_PORT/_health || true)"
   if [ "$GRACEFUL" == "200 OK" ]; then
-    >&2 echo GRACEFUL SHUTDOWN, waiting for $VARNISH_SHUTDOWN_DELAY seconds.
+    log GRACEFUL SHUTDOWN, waiting for $VARNISH_SHUTDOWN_DELAY seconds.
     sleep $VARNISH_SHUTDOWN_DELAY
   fi
-  pkill -P $$
+  exec 2> /dev/null
+  pkill -TERM -P $$
 }
 
 trap 'handle_signal SIGKILL' ERR
@@ -118,5 +127,5 @@ trap 'handle_signal SIGINT' SIGINT
 track /bin/varnish LOG_TO_STDERR
 [ "$VARNISH_ACCESS_LOG" == "true" ] && track /bin/varnish-logs
 track /bin/prometheus-varnish-exporter LOG_TO_STDERR
-track /bin/varnish-reload-watch KILL_BEFORE_EXIT LOG_TO_STDERR
+track /bin/confd-reload-watch KILL_BEFORE_EXIT LOG_TO_STDERR
 wait -n

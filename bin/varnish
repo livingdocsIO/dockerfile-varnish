@@ -1,4 +1,5 @@
 #!/bin/bash
+exec 1> >(awk '{print strftime("%Y-%m-%dT%H:%M:%SZ",systime()) " [varnish]: " $0;}') 2>&1
 exec varnishd -F -f $VARNISH_CONFIG \
   -S $VARNISH_ADMIN_SECRET_FILE \
   -s malloc,$VARNISH_CACHE_SIZE \
