@@ -1,3 +1,2 @@
-#!/bin/sh
-sleep 3
-exec prometheus_varnish_exporter -web.listen-address :$PROMETHEUS_EXPORTER_PORT 1>&2
+#!/bin/bash
+exec prometheus_varnish_exporter -web.listen-address :$PROMETHEUS_EXPORTER_PORT

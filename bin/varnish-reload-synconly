@@ -1,2 +1,2 @@
-#!/bin/sh
-exec /bin/confd --log-level info --onetime --sync-only --backend env 1>&2
+#!/bin/bash
+exec /bin/confd --log-level info --onetime --sync-only --backend env

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 exec varnishd -F -f $VARNISH_CONFIG \
   -S $VARNISH_ADMIN_SECRET_FILE \
   -s malloc,$VARNISH_CACHE_SIZE \
@@ -15,4 +15,4 @@ exec varnishd -F -f $VARNISH_CONFIG \
   -p shortlived=360 \
   -p workspace_backend=128k \
   -p syslog_cli_traffic=off \
-  $VARNISH_RUNTIME_PARAMETERS 1>&2
+  $VARNISH_RUNTIME_PARAMETERS
