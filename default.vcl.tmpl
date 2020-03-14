@@ -7,6 +7,7 @@ vcl 4.1;
 import std;
 import directors;
 import xkey;
+import purge;
 import var;
 
 {{ if eq (getenv "BACKEND_PROBE") "true" }}
@@ -78,7 +79,7 @@ backend backend_remote_{{ $backendIndex }}_{{ $ipIndex }} {
 {{ $PURGE_IP_WHITELIST := (split (getenv "PURGE_IP_WHITELIST") ",") }}
 
 # allowed to purge
-acl purge {
+acl purge_acl {
   # Localhost
   "localhost";
   "127.0.0.1";
@@ -124,7 +125,7 @@ sub vcl_recv {
     set req.http.status = var.global_get("health");
 
     if (req.method == "POST") {
-      if (client.ip ~ purge) {
+      if (client.ip ~ purge_acl) {
         set req.http.health = std.integer(req.http.health, 0);
         if (req.http.health !~ "^[2345]") {
           return (synth(405, "Cannot set the invalid health status code '" + req.http.health + "' using a POST /_health request."));
@@ -136,25 +137,6 @@ sub vcl_recv {
     }
 
     return (synth(222, req.http.status));
-  }
-
-  # Allow purging
-  if (req.method == "BAN") {
-    # purge is an ACL defined above, we check the ip is in there
-    if (client.ip !~ purge) {
-      return (synth(405, "The IP '" + client.ip + "' is not allowed to send BAN requests."));
-    }
-
-    if (req.http.xkey) {
-      set req.http.n-gone = xkey.softpurge(req.http.xkey);
-      return (synth(200, "Invalidated " + req.http.n-gone + " objects"));
-    } else if (req.http.ban) {
-      ban(req.http.ban);
-      return (synth(200, "Banned"));
-    } else {
-      ban("obj.http.url ~ " + req.url);
-      return (synth(200, "Banned"));
-    }
   }
 
   if (req.http.Error-Status) {
@@ -176,6 +158,27 @@ sub vcl_recv {
   else {
     set req.backend_hint = delivery.backend();
   }
+
+  # Allow purging
+  if (req.method == "BAN") {
+    # purge_acl is an ACL defined above, we check the ip is in there
+    if (client.ip !~ purge_acl) {
+      return (synth(405, "The IP '" + client.ip + "' is not allowed to send " + req.method +  " requests."));
+    }
+
+    if (req.http.xkey) {
+      set req.http.xkey-purged = xkey.softpurge(req.http.xkey);
+      return (synth(200, "Invalidated " + req.http.xkey-purged + " objects"));
+    } else if (req.http.ban) {
+      ban(req.http.ban);
+      return (synth(200, "Banned"));
+    } else {
+      ban("obj.http.url ~ " + req.url);
+      return (synth(200, "Banned"));
+    }
+  }
+
+  if (req.method == "PURGE") { return (hash); }
 
   # Support websockets
   if (req.http.upgrade ~ "(?i)websocket") { return (pipe); }
@@ -352,6 +355,7 @@ sub vcl_deliver {
 }
 
 sub vcl_hit {
+  if (req.method == "PURGE") { purge.soft(); return (synth(200, "Purged")); }
   if (obj.ttl >= 0s) { set req.http.X-Cache = "HIT"; }
   else if (obj.ttl + obj.grace > 0s) { set req.http.X-Cache = "STALE"; }
   else if (obj.ttl + obj.grace + obj.keep > 0s) { set req.http.X-Cache = "KEEP"; }
@@ -359,6 +363,7 @@ sub vcl_hit {
 }
 
 sub vcl_miss {
+  if (req.method == "PURGE") { return (synth(200, "Purged")); }
   set req.http.X-Cache = "MISS";
   return (fetch);
 }

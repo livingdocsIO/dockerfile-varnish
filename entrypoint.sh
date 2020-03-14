@@ -18,6 +18,7 @@ export VARNISH_CACHE_KEEP=${VARNISH_CACHE_KEEP:-1h}
 export VARNISH_STRIP_QUERYSTRING=${VARNISH_STRIP_QUERYSTRING:-false}
 export VARNISH_CUSTOM_SCRIPT=${VARNISH_CUSTOM_SCRIPT:-}
 export VARNISH_SHUTDOWN_DELAY=${VARNISH_SHUTDOWN_DELAY:-5}
+export VARNISH_ACCESS_LOG=true
 
 export BACKEND=${BACKEND:-}
 export BACKEND_MAX_CONNECTIONS=${BACKEND_MAX_CONNECTIONS:-75}
@@ -81,10 +82,10 @@ trap 'kill_processes SIGINT' SIGINT
 
 set +e
 track /bin/varnish
-track /bin/varnish-logs
 track /bin/prometheus-varnish-exporter
 track /bin/varnish-reload-watch KILL_BEFORE_EXIT
 
+[ "$VARNISH_ACCESS_LOG" == "true" ] && track /bin/varnish-logs
 wait -n
 kill_processes ERROR "$?"
 

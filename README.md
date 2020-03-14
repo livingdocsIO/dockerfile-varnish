@@ -31,6 +31,7 @@ All configuration is done using environment variables.
 * `VARNISH_CACHE_GRACE`, optional, default: 24h
 * `VARNISH_CACHE_KEEP`, optional, default: 1h
 * `VARNISH_RUNTIME_PARAMETERS`, optional
+* `VARNISH_ACCESS_LOG`, optional, default: true, log frontend requests
 
 ### Varnish Backend Options
 * `BACKEND` the hostname:port of the backend, supports comma delimited values
