@@ -125,6 +125,10 @@ sub vcl_recv {
 
     if (req.method == "POST") {
       if (client.ip ~ purge) {
+        set req.http.health = std.integer(req.http.health, 0);
+        if (req.http.health !~ "^[2345]") {
+          return (synth(405, "Cannot set the invalid health status code '" + req.http.health + "' using a POST /_health request."));
+        }
         var.global_set("health", req.http.health);
       } else {
         return (synth(405, "The IP '" + client.ip + "' is not allowed to send a POST /_health request."));
