@@ -159,6 +159,13 @@ sub vcl_recv {
     set req.backend_hint = delivery.backend();
   }
 
+  if (!req.http.Accept) { set req.http.Accept = "text/html"; }
+  else if (req.http.Accept ~ "text/html") { set req.http.Accept = "text/html"; }
+  else if (req.http.Accept ~ "application/json") { set req.http.Accept = "application/json"; }
+  else if (req.http.Accept ~ "application/xml") { set req.http.Accept = "application/xml"; }
+  else if (req.http.Accept ~ "text/plain") { set req.http.Accept = "text/plain"; }
+  else { set req.http.Accept = "text/html"; }
+
   # Allow purging
   if (req.method == "BAN") {
     # purge_acl is an ACL defined above, we check the ip is in there
@@ -235,6 +242,8 @@ sub vcl_hash {
   # Cache based on user agent
   if (req.http.User-Agent ~ "^[a-zA-Z0-9-]+$") { hash_data(req.http.User-Agent); }
   if (req.http.Authorization) { hash_data(req.http.Authorization); }
+
+  hash_data(req.http.Accept);
 
   # Cache based on url
   hash_data(req.url);
@@ -404,10 +413,10 @@ sub vcl_synth {
   unset resp.http.X-Varnish;
   unset resp.http.Server;
 
-  if (req.http.Content-Type ~ "application/json") {
+  if (req.http.Accept == "application/json") {
     set resp.http.Content-Type = "application/json; charset=utf-8";
     set resp.body = {{ template "vstr" `{"status":${resp.status}$,"error":"${resp.reason}$"}`}};
-  } else if (req.http.Content-Type ~ "text/html") {
+  } else if (req.http.Accept == "text/html") {
     set resp.http.Content-Type = "text/html; charset=utf-8";
     set resp.body = {{ template "vstr" `<!DOCTYPE html><html><head><title>${resp.status}$ ${resp.reason}$</title></head><body><h1>${resp.status}$ ${resp.reason}$</h1></body></html>`}};
   } else {
