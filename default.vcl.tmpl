@@ -280,7 +280,7 @@ sub vcl_backend_response {
   # Directly pass 50x responses to handle_request_errors
   if (beresp.status >= 500 && beresp.status <= 504) {
     if (bereq.is_bgfetch) { return (abandon); }
-    if (bereq.retries < 1) { return (retry); }
+    if (bereq.retries < {{getenv "BACKEND_FETCH_RETRIES" "1"}}) { return (retry); }
 
     {{ if $ERROR_PAGE }}
     if (bereq.http.host == "error") { return (abandon); }
@@ -370,7 +370,7 @@ sub vcl_miss {
 
 sub vcl_backend_error {
   if (bereq.is_bgfetch) { return (abandon); }
-  if (bereq.retries < 1) { return (retry); }
+  if (bereq.retries < {{getenv "BACKEND_FETCH_RETRIES" "1"}}) { return (retry); }
 
   {{ if $ERROR_PAGE }}
   if (bereq.http.host == "error") { return (abandon); }
