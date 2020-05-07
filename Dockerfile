@@ -7,14 +7,26 @@ RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go bu
 FROM alpine:3.11
 ENV VARNISH_VERSION=6.4.0-r0
 
-RUN apk add --no-cache bash ca-certificates bind-tools nano curl procps && \
-  apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --no-cache varnish=$VARNISH_VERSION && \
-  apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --virtual build-dependencies --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
-    && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.3' --single-branch /varnish-modules \
-    && cd /varnish-modules \
-    && ./bootstrap && ./configure && make && make install \
-    && apk del build-dependencies \
-    && rm -Rf /varnish-modules
+# Install utils that stay in the image
+RUN apk add --no-cache bash ca-certificates bind-tools nano curl procps
+
+# Install varnish
+RUN apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --no-cache varnish=$VARNISH_VERSION
+
+# Install varnish-modules
+RUN  apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --virtual varnish-deps --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
+  && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.4' --single-branch /varnish-modules \
+  && cd /varnish-modules \
+  && ./bootstrap && ./configure && make && make install \
+  && rm -Rf /varnish-modules
+
+# Install libvmod-curl
+RUN apk add --virtual curl-deps --no-cache libcurl \
+  && git clone https://github.com/varnish/libvmod-curl.git --depth='1' --branch='6.3' --single-branch /libvmod-curl \
+  && cd /libvmod-curl && ./autogen.sh && ./configure && make && (make check || (cat src/test-suite.log >&2)) && make install \
+  && rm -Rf /libvmod-curl \
+  # Remove all build deps
+  && apk del varnish-deps curl-deps
 
 COPY --from=go /go/bin/* /bin/
 
