@@ -9,6 +9,7 @@ import directors;
 import xkey;
 import purge;
 import var;
+import curl;
 
 {{ if eq (getenv "BACKEND_PROBE") "true" }}
 probe delivery_probe {
@@ -360,6 +361,9 @@ sub vcl_deliver {
   unset resp.http.Surrogate-Control;
   unset resp.http.X-Varnish-Grace;
 
+# Calling query for MPP
+  call query;
+
   return (deliver);
 }
 
@@ -408,6 +412,27 @@ sub vcl_synth {
     set resp.status = std.integer(resp.reason, 503);
   }
 
+  # If we're synthesizing a redirect for eMeter..
+    if (resp.status == 751)
+    {
+        # ..ensure a tracking cookie is added..
+        call set_tracking_cookie;
+        
+        # ..and service it as such, using the specified location.
+        if (var.get_string("eMeterLocation") != "")
+        {
+            set resp.status = 302;
+            set resp.http.Location = var.get_string("eMeterLocation");
+            std.log("eMeter redirecting to: " + resp.http.Location); # VERBOSE
+            var.clear();
+            return (deliver);
+        }
+
+        std.log("A redirect (#751) has been requested (reason: " 
+                + resp.reason 
+                + "), but no location has been specified.");
+    }
+
   set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}";
   set resp.http.X-Cache = "SYNTH";
   unset resp.http.X-Varnish;
@@ -423,10 +448,182 @@ sub vcl_synth {
     set resp.http.Content-Type = "text/plain; charset=utf-8";
     set resp.body = {{ template "vstr" `${resp.status}$ ${resp.reason}$` }};
   }
-
   return (deliver);
 }
 
 sub vcl_fini {
   return (ok);
+}
+
+sub query  
+{
+    # We'll be checking for any cookie creation requirements later; ensure the check will 
+    # work when we don't need to do anything by creating an empty cookie.
+    var.set_string("eMeterAccessTokenCookie", "");
+    
+    # If the request should be sent for an eMetering check (this is a sample condition only,
+    # which matches any non-image that is not the 'root')..
+    # The last check is added to match only articles, this check can be also done in the eMeter console if we want all requests to be metered
+    if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
+        && req.url != "/" 
+        && req.url ~ "\-li.[0-9]*"
+        && resp.http.X-Paid-Content == "true")
+    {
+        std.log("URL to be sent for eMeter check: " + req.http.host + req.url); # VERBOSE
+
+        # ..then query eMeter for the URL. Set up the cardinal data items.
+        var.set_string("eMeterUrl", "http://emeter-uat.mppapi.io/probes/varnish");
+        var.set_string("eMeterTokenId", "4148199D6E004F50BFB5461EFA97439D");
+
+        # We want to forward all request cookies within the eMeter request, so start
+        # building the eMeter cookie with that.
+        var.set_string("eMeterCookie", req.http.Cookie);
+        
+        # If the request doesn't contain an eMeter access token..
+        if (var.get_string("eMeterCookie") !~ "(AccessToken)=(.*?)($|;|,(?! ))")
+        {
+            # ..then we want to create one..
+            var.set_string("eMeterAccessTokenCookie", "AccessToken=4b18e807-1cda-4bf3-81f2-eecb0db95bbe");
+            std.log("Created cookie for access token: " + var.get_string("eMeterAccessTokenCookie")); # VERBOSE
+            
+            # ..and add it to the eMeter cookie.
+            if (var.get_string("eMeterCookie") != "")
+            {
+                var.set_string("eMeterCookie", var.get_string("eMeterCookie") + ";" + var.get_string("eMeterAccessTokenCookie"));
+            }
+            else
+            {
+                var.set_string("eMeterCookie", var.get_string("eMeterAccessTokenCookie"));
+            }
+        }
+        else
+        {
+            std.log("eMeter access token already present");
+        }
+
+        # Start constructing the query
+        var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + var.get_string("eMeterTokenId")  
+                                      + {"", "REQUEST_URI" : ""} + req.http.host + req.url
+                                      + {"", "EndUserClientIp" : ""} + client.ip
+                                      + {"", "EndUserClientIdentity" : ""} + client.identity
+                                      + {"", "VarnishServerIp" : ""}  + server.ip
+                                      + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content
+                                      + {"", "ProbeVersion" : "1.1.0""}
+                                      );
+
+        std.log("eMeter req, X-TokenId: " + var.get_string("eMeterTokenId")); # VERBOSE
+        std.log("eMeter req, REQUEST_URI: " + req.http.host + req.url); # VERBOSE
+        std.log("eMeter req, EndUserClientIp: " + client.ip); # VERBOSE
+        std.log("eMeter req, EndUserClientIdentity: " + client.identity); # VERBOSE
+        std.log("eMeter req, VarnishServerIp: " + server.ip); # VERBOSE
+        std.log("eMeter req, Paid content: " + resp.http.X-Paid-Content); # VERBOSE
+        std.log("eMeter req, ProbeVersion: 1.1.0"); # VERBOSE
+
+        # Add any cookie header to the query
+        if (var.get_string("eMeterCookie") != "")
+        {
+            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Cookie" : ""} + var.get_string("eMeterCookie") + {"""});
+            std.log("eMeter req, Cookie: " + var.get_string("eMeterCookie")); # VERBOSE
+        }
+        
+        # Add any contentType header to the query
+        var.set_string("eMeterContentType", req.http.ContentType);
+        if (var.get_string("eMeterContentType") != "")
+        {
+            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "ContentType" : ""} + var.get_string("eMeterContentType") + {"""});
+            std.log("eMeter req, ContentType: " + var.get_string("eMeterContentType")); # VERBOSE
+        }
+
+        # Add referer header to the query
+        var.set_string("reqReferer", req.http.Referer);
+        if (var.get_string("reqReferer") != "")
+        {
+            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Referer" : ""} + var.get_string("reqReferer") + {"""});
+            std.log("eMeter req, Referer: " + var.get_string("reqReferer")); # VERBOSE
+        }
+
+        # Add any user agent header to the query
+        var.set_string("eMeterUserAgent", req.http.User-Agent);
+        if (var.get_string("eMeterUserAgent") != "")
+        {
+            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "User-Agent" : ""} + var.get_string("eMeterUserAgent") + {"""});
+            std.log("eMeter req, User-Agent: " + var.get_string("eMeterUserAgent")); # VERBOSE
+        }
+        
+        # Complete the query 
+        var.set_string("eMeterQuery", var.get_string("eMeterQuery") + " }");
+
+        # Verbose request logging (remove)        
+        std.log("eMeter URL: " + var.get_string("eMeterUrl")); # VERBOSE
+
+        # Give eMeter 10 seconds to respond and post the request
+        curl.set_timeout(10000);
+        curl.post(var.get_string("eMeterUrl"), var.get_string("eMeterQuery"));
+
+        # If the request times out the curl status is zero; a response will
+        # be 100 or more. So, check we got a response.
+        if (curl.status() > 0)
+        {
+            # Verbose response logging (remove)        
+            std.log("eMeter response, body: " + curl.body()); # VERBOSE
+            std.log("eMeter response, AllowAccess: " + curl.header("AllowAccess")); # VERBOSE
+            std.log("eMeter response, AllProcessed: " + curl.header("AllProcessed")); # VERBOSE
+            std.log("eMeter response, Error: " + curl.header("eMeterError")); # VERBOSE
+            std.log("eMeter response, Location: " + curl.header("Location")); # VERBOSE
+            std.log("eMeter response, StatusCode: " + curl.status()); # VERBOSE
+
+            # If eMeter responded with an access ruling..
+            var.set_string("eMeterAllowAccess", curl.header("AllowAccess"));
+            if (var.get_string("eMeterAllowAccess") != "")
+            {
+                # ..and that ruling is a denial of access..
+                if (var.get_string("eMeterAllowAccess") == "false")
+                {
+                    # ..then find where to redirect the client to..
+                    var.set_string("eMeterLocation", curl.header("Location"));
+                    if (var.get_string("eMeterLocation") != "")
+                    {
+                        # ..and redirect via the VCL error mechanism.
+                        std.log("eMeter has denied access and will redirect to: " + var.get_string("eMeterLocation"));
+                        return (synth(751, "eMeter redirection"));
+                    }
+
+                    std.log("eMeter has denied access but no redirect location has been specified, so access will be permitted");
+                }
+                else
+                {
+                    std.log("eMeter has approved access"); # VERBOSE
+                }
+            }
+            else
+            {
+                std.log("eMeter responded but the response did not include an AllowAccess header, so access will be permitted.");
+            }
+        }
+        else
+        {
+            std.log("eMeter query timed out, so access will be permitted. Error: " + curl.error());
+        }
+
+        curl.free();
+    }
+    else
+    {
+        std.log("URL doesn't need to be processed by eMeter: " + req.http.host + req.url); # VERBOSE
+    }
+
+    # If eMeter hasn't resulted in a successful redirect, then allow
+    # Varnish to process the request according to default behaviour
+}
+
+sub set_tracking_cookie
+{
+    # If an eMeter access token should be added to the client..
+    if (var.get_string("eMeterAccessTokenCookie") != "")
+    {
+        # ..then add it, specifying an expiry of 1-Jan-2099.
+        var.set_string("eMeterAccessTokenCookie", var.get_string("eMeterAccessTokenCookie") + "; Path=/; Expires=Thu, 1 Jan 2099 10:00:00 GMT");
+        std.log("Adding Set-Cookie for access token '" + var.get_string("eMeterAccessTokenCookie") + "'"); # VERBOSE
+        set resp.http.Set-Cookie = var.get_string("eMeterAccessTokenCookie");
+    }
 }
