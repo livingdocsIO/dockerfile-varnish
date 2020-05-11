@@ -12,27 +12,16 @@ RUN echo 'Install utils that stay in the image' \
   && echo 'Install varnish' \
   && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --no-cache varnish=$VARNISH_VERSION \
   && echo 'Install varnish-modules' \
-  && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --virtual varnish-deps --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf autoconf-archive libtool py-docutils make \
+  && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --virtual varnish-deps --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
   && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.4' --single-branch \
   && cd /varnish-modules && ./bootstrap && ./configure && make && make install && cd / \
   && echo 'Install libvmod-curl' \
   && apk add --virtual curl-deps --no-cache libcurl \
   && git clone https://github.com/varnish/libvmod-curl.git --depth='1' --branch='6.3' --single-branch \
-  && cd /libvmod-curl && ./autogen.sh && ./configure && make && make install && cd / 
-  
-  # COPY uuid-1.6.2.tar.gz /uuid/
-  # RUN echo "Test"
-  # RUN cd /uuid && tar -C /uuid -xzf uuid-1.6.2.tar.gz 
-  # RUN cd /uuid/uuid-1.6.2 && ./configure --prefix=/ossp-uuid && make && make check && make install && cd /
-  # RUN export OSSP_LIBS=/ossp-uuid/lib
-
-  # RUN echo 'Install libvmod-uuid' \
-  # && apk add --virtual libuuid --no-cache \
-  # && git clone https://github.com/otto-de/libvmod-uuid.git --depth='1' --branch='6.0' --single-branch \
-  # && cd /libvmod-uuid && ./autogen.sh && ./configure && make && make install && cd / \
-  # && echo 'Remove all build deps' \
-  # && rm -Rf /varnish-modules /libvmod-curl /libvmod-uuid \
-  # && apk del varnish-deps curl-deps
+  && cd /libvmod-curl && ./autogen.sh && ./configure && make && make install && cd / \
+  && echo 'Remove all build deps' \
+  && rm -Rf /varnish-modules /libvmod-curl \
+  && apk del varnish-deps curl-deps 
 
 COPY --from=go /go/bin/* /bin/
 

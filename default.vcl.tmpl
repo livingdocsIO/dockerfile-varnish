@@ -415,9 +415,6 @@ sub vcl_synth {
   # If we're synthesizing a redirect for eMeter..
     if (resp.status == 751)
     {
-        # ..ensure a tracking cookie is added..
-        call set_tracking_cookie;
-        
         # ..and service it as such, using the specified location.
         if (var.get_string("eMeterLocation") != "")
         {
@@ -472,35 +469,13 @@ sub query
         std.log("URL to be sent for eMeter check: " + req.http.host + req.url); # VERBOSE
 
         # ..then query eMeter for the URL. Set up the cardinal data items.
-        var.set_string("eMeterUrl", "http://emeter-uat.mppapi.io/probes/varnish");
-        var.set_string("eMeterTokenId", "4148199D6E004F50BFB5461EFA97439D");
+        var.set_string("eMeterUrl", "{{ getenv "E_METER_URL" }}");
+        var.set_string("eMeterTokenId", "{{ getenv "E_METER_X_TOKEN" }}");
 
         # We want to forward all request cookies within the eMeter request, so start
         # building the eMeter cookie with that.
         var.set_string("eMeterCookie", req.http.Cookie);
         
-        # If the request doesn't contain an eMeter access token..
-        if (var.get_string("eMeterCookie") !~ "(AccessToken)=(.*?)($|;|,(?! ))")
-        {
-            # ..then we want to create one..
-            var.set_string("eMeterAccessTokenCookie", "AccessToken=4b18e807-1cda-4bf3-81f2-eecb0db95bbe");
-            std.log("Created cookie for access token: " + var.get_string("eMeterAccessTokenCookie")); # VERBOSE
-            
-            # ..and add it to the eMeter cookie.
-            if (var.get_string("eMeterCookie") != "")
-            {
-                var.set_string("eMeterCookie", var.get_string("eMeterCookie") + ";" + var.get_string("eMeterAccessTokenCookie"));
-            }
-            else
-            {
-                var.set_string("eMeterCookie", var.get_string("eMeterAccessTokenCookie"));
-            }
-        }
-        else
-        {
-            std.log("eMeter access token already present");
-        }
-
         # Start constructing the query
         var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + var.get_string("eMeterTokenId")  
                                       + {"", "REQUEST_URI" : ""} + req.http.host + req.url
@@ -614,16 +589,4 @@ sub query
 
     # If eMeter hasn't resulted in a successful redirect, then allow
     # Varnish to process the request according to default behaviour
-}
-
-sub set_tracking_cookie
-{
-    # If an eMeter access token should be added to the client..
-    if (var.get_string("eMeterAccessTokenCookie") != "")
-    {
-        # ..then add it, specifying an expiry of 1-Jan-2099.
-        var.set_string("eMeterAccessTokenCookie", var.get_string("eMeterAccessTokenCookie") + "; Path=/; Expires=Thu, 1 Jan 2099 10:00:00 GMT");
-        std.log("Adding Set-Cookie for access token '" + var.get_string("eMeterAccessTokenCookie") + "'"); # VERBOSE
-        set resp.http.Set-Cookie = var.get_string("eMeterAccessTokenCookie");
-    }
 }
