@@ -18,10 +18,10 @@ RUN echo 'Install utils that stay in the image' \
   && echo 'Install libvmod-curl' \
   && apk add --virtual curl-deps --no-cache libcurl \
   && git clone https://github.com/varnish/libvmod-curl.git --depth='1' --branch='6.3' --single-branch \
-  && cd /libvmod-curl && ./autogen.sh && ./configure && make && (make check || (cat src/test-suite.log >&2)) && make install && cd / \
+  && cd /libvmod-curl && ./autogen.sh && ./configure && make && make install && cd / \
   && echo 'Remove all build deps' \
   && rm -Rf /varnish-modules /libvmod-curl \
-  && apk del varnish-deps curl-deps
+  && apk del varnish-deps curl-deps 
 
 COPY --from=go /go/bin/* /bin/
 
