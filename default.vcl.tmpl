@@ -213,8 +213,7 @@ sub vcl_recv {
   set req.url = std.querysort(req.url);
   {{ end }}
 
-  # Nuke all cookies
-  unset req.http.Cookie;
+  # Nuke all cache
   unset req.http.X-Cache;
 
   {{ getenv "VARNISH_CUSTOM_SCRIPT" "" }}
@@ -361,7 +360,7 @@ sub vcl_deliver {
   unset resp.http.Surrogate-Control;
   unset resp.http.X-Varnish-Grace;
 
-# Calling query for MPP
+  # Calling query for MPP
   call query;
 
   return (deliver);
@@ -418,7 +417,6 @@ sub vcl_synth {
         {
             set resp.status = 302;
             set resp.http.Location = var.get_string("eMeterLocation");
-            std.log("eMeter redirecting to: " + resp.http.Location); # VERBOSE
             var.clear();
             return (deliver);
         }
@@ -455,7 +453,7 @@ sub query
     {
         var.set_string("eMeterUrl", "{{ getenv "E_METER_URL" }}");
         var.set_string("eMeterTokenId", "{{ getenv "E_METER_X_TOKEN" }}");
-        var.set_string("eMeterCookie", resp.http.Cookie);
+        var.set_string("eMeterCookie", req.http.Cookie);
         var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + var.get_string("eMeterTokenId")  
                                       + {"", "REQUEST_URI" : ""} + req.http.host + req.url
                                       + {"", "EndUserClientIp" : ""} + client.ip
@@ -498,11 +496,8 @@ sub query
                     {
                         return (synth(751, "eMeter redirection"));
                     }
-
                 }
-               
             }
- 
         }
         curl.free();
     }
