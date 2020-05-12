@@ -47,6 +47,10 @@ All configuration is done using environment variables.
 * `BACKEND_PROBE_THRESHOLD`, optional, default: 2
 * `REMOTE_BACKEND`, optional, the host:port of additional backends you can use for example with ESI
 
+### Varnish EMeter required values
+* `E_METER_URL` eMeter endpoint used for sending eSuiteInformation
+* `E_METER_X_TOKEN`, eMeter unique x-token-id
+
 ### VCL Configuration Options
 * `ERROR_PAGE`, optional, an html page that is shown for every 5xx error instead of the regular server response. You can set it to something like `/error` or `http://some-error-page/error?code={{code}}`
   - Attention, https doesn't work
