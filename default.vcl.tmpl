@@ -136,9 +136,10 @@ sub vcl_recv {
         return (synth(405, "The IP '" + client.ip + "' is not allowed to send a POST /_health request."));
       }
     }
-
     return (synth(222, req.http.status));
   }
+
+  call remapMppParam;
 
   if (req.http.Error-Status) {
     set req.http.host = "error";
@@ -263,9 +264,6 @@ sub vcl_backend_response {
   if (bereq.uncacheable) { return (deliver); }
   set beresp.http.url = bereq.url;
 
-  # We don't use any cookies, remove them to prevent security issues
-  unset beresp.http.Set-Cookie;
-
   # Enable ESI for pages that request it
   if (beresp.http.Surrogate-Control ~ "ESI/1.0") {
     set beresp.do_esi = true;
@@ -337,6 +335,12 @@ sub vcl_deliver {
   if (resp.http.X-Served-By) { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}, " + resp.http.X-Served-By; }
   else { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}"; }
 
+  call remapMppParam;
+  if (var.get_string("eMeterSessionId") != ""){
+    if(req.http.Cookie !~ "MPP-SessionId"){
+      set resp.http.Set-Cookie = "MPP-SessionId=" + var.get_string("eMeterSessionId") + "; Max-Age=3600;";
+    }
+  }
   if (resp.http.X-Cache) { set resp.http.X-Cache = req.http.X-Cache + ", " + resp.http.X-Cache; }
   else { set resp.http.X-Cache = req.http.X-Cache; }
 
@@ -410,17 +414,19 @@ sub vcl_synth {
   } else if (resp.status == 222) {
     set resp.status = std.integer(resp.reason, 503);
   }
-
+  
+  {{ if(getenv "E_METER_URL") }}
     if (resp.status == 751)
     {
         if (var.get_string("eMeterLocation") != "")
         {
             set resp.status = 302;
-            set resp.http.Location = var.get_string("eMeterLocation") + "?rid=" + req.http.Host + req.url;
+            set resp.http.Location = var.get_string("eMeterLocation") + "?rid=https://" + req.http.Host + req.url;
             var.clear();
             return (deliver);
         }
     }
+  {{ end }}
 
   set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}";
   set resp.http.X-Cache = "SYNTH";
@@ -446,59 +452,73 @@ sub vcl_fini {
 
 sub query  
 {
-    if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
-        && req.url != "/" 
-        && req.url ~ "\-li.[0-9]*"
-        && resp.http.X-Paid-Content == "true")
-    {
-        var.set_string("eMeterUrl", "{{ getenv "E_METER_URL" }}");
-        var.set_string("eMeterTokenId", "{{ getenv "E_METER_X_TOKEN" }}");
-        var.set_string("eMeterCookie", req.http.Cookie);
-        var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + var.get_string("eMeterTokenId")  
-                                      + {"", "REQUEST_URI" : ""} + req.http.host + req.url
-                                      + {"", "EndUserClientIp" : ""} + client.ip
-                                      + {"", "EndUserClientIdentity" : ""} + client.identity
-                                      + {"", "VarnishServerIp" : ""}  + server.ip
-                                      + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content
-                                      + {"", "ProbeVersion" : "1.1.0""}
-                                      );
-        if (var.get_string("eMeterCookie") != "")
-        {
-            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Cookie" : ""} + var.get_string("eMeterCookie") + {"""});
-        }
-        var.set_string("eMeterContentType", req.http.ContentType);
-        if (var.get_string("eMeterContentType") != "")
-        {
-            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "ContentType" : ""} + var.get_string("eMeterContentType") + {"""});
-        }
-        var.set_string("reqReferer", req.http.Referer);
-        if (var.get_string("reqReferer") != "")
-        {
-            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Referer" : ""} + var.get_string("reqReferer") + {"""});
-        }
-        var.set_string("eMeterUserAgent", req.http.User-Agent);
-        if (var.get_string("eMeterUserAgent") != "")
-        {
-            var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "User-Agent" : ""} + var.get_string("eMeterUserAgent") + {"""});
-        }
-        var.set_string("eMeterQuery", var.get_string("eMeterQuery") + " }");
-        curl.set_timeout(10000);
-        curl.post(var.get_string("eMeterUrl"), var.get_string("eMeterQuery"));
-        if (curl.status() > 0)
-        {
-            var.set_string("eMeterAllowAccess", curl.header("AllowAccess"));
-            if (var.get_string("eMeterAllowAccess") != "")
-            {
-                if (var.get_string("eMeterAllowAccess") == "false")
-                {
-                    var.set_string("eMeterLocation", curl.header("Location"));
-                    if (var.get_string("eMeterLocation") != "")
-                    {
-                        return (synth(751, "eMeter redirection"));
-                    }
-                }
-            }
-        }
-        curl.free();
-    }
+  {{ if(getenv "E_METER_URL") }}
+    {{ if (getenv "E_METER_X_TOKEN") }}
+      if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
+          && req.url != "/" 
+          && req.url ~ "-li.[0-9]*"
+          && resp.http.X-Paid-Content == "true")
+      {
+          var.set_string("eMeterUrl", "{{ getenv "E_METER_URL" }}");
+          var.set_string("eMeterTokenId", "{{ getenv "E_METER_X_TOKEN" }}");
+          var.set_string("eMeterCookie", req.http.Cookie);
+          var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + var.get_string("eMeterTokenId")  
+                                        + {"", "REQUEST_URI" : ""} + req.http.host + req.url
+                                        + {"", "EndUserClientIp" : ""} + client.ip
+                                        + {"", "EndUserClientIdentity" : ""} + client.identity
+                                        + {"", "VarnishServerIp" : ""}  + server.ip
+                                        + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content
+                                        + {"", "ProbeVersion" : "1.1.0""}
+                                        );
+          if (req.http.Cookie !~ "MPP-SessionId" && var.get_string("eMeterSessionId") != "")
+          {
+             var.set_string("eMeterCookie", req.http.Cookie + "; MPP-SessionId=" + var.get_string("eMeterSessionId"));
+          }
+          if (var.get_string("eMeterCookie") != "")
+          {
+              var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Cookie" : ""} + var.get_string("eMeterCookie") + {"""});
+          }
+          var.set_string("eMeterContentType", req.http.ContentType);
+          if (var.get_string("eMeterContentType") != "")
+          {
+              var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "ContentType" : ""} + var.get_string("eMeterContentType") + {"""});
+          }
+          var.set_string("reqReferer", req.http.Referer);
+          if (var.get_string("reqReferer") != "")
+          {
+              var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Referer" : ""} + var.get_string("reqReferer") + {"""});
+          }
+          var.set_string("eMeterUserAgent", req.http.User-Agent);
+          if (var.get_string("eMeterUserAgent") != "")
+          {
+              var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "User-Agent" : ""} + var.get_string("eMeterUserAgent") + {"""});
+          }
+          var.set_string("eMeterQuery", var.get_string("eMeterQuery") + " }");
+          curl.set_timeout(10000);
+          curl.post(var.get_string("eMeterUrl"), var.get_string("eMeterQuery"));
+          if (curl.status() > 0)
+          {
+              var.set_string("eMeterAllowAccess", curl.header("AllowAccess"));
+              if (var.get_string("eMeterAllowAccess") != "")
+              {
+                  if (var.get_string("eMeterAllowAccess") == "false")
+                  {
+                      var.set_string("eMeterLocation", curl.header("Location"));
+                      if (var.get_string("eMeterLocation") != "")
+                      {
+                          return (synth(751, "eMeter redirection"));
+                      }
+                  }
+              }
+          }
+          curl.free();
+      }
+    {{ end }}
+  {{ end }}
+}
+
+sub remapMppParam {
+if (req.url ~ "mpu=") {
+    var.set_string("eMeterSessionId", regsuball(req.url, "[-_A-z0-9+()%.\/:]+\?mpu=", ""));
+  }
 }
