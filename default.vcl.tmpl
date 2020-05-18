@@ -413,7 +413,14 @@ sub vcl_synth {
         if (var.get_string("eMeterLocation") != "")
         {
             set resp.status = 302;
-            set resp.http.Location = var.get_string("eMeterLocation") + "?rid=https://" + req.http.Host + req.url;
+            if (var.get_string("eMeterLocation") ~ "?")
+            {
+                set resp.http.Location = var.get_string("eMeterLocation") + "&rid=https://" + req.http.Host + req.url;
+            }
+            else
+            {
+                set resp.http.Location = var.get_string("eMeterLocation") + "?rid=https://" + req.http.Host + req.url;
+            }
             var.clear();
             return (deliver);
         }
