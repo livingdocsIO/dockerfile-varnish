@@ -139,8 +139,6 @@ sub vcl_recv {
     return (synth(222, req.http.status));
   }
 
-  call remapMppParam;
-
   if (req.http.Error-Status) {
     set req.http.host = "error";
     {{ if $ERROR_PAGE }}
@@ -335,12 +333,6 @@ sub vcl_deliver {
   if (resp.http.X-Served-By) { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}, " + resp.http.X-Served-By; }
   else { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}"; }
 
-  call remapMppParam;
-  if (var.get_string("eMeterSessionId") != ""){
-    if(req.http.Cookie !~ "MPP-SessionId"){
-      set resp.http.Set-Cookie = "MPP-SessionId=" + var.get_string("eMeterSessionId") + "; Max-Age=3600;";
-    }
-  }
   if (resp.http.X-Cache) { set resp.http.X-Cache = req.http.X-Cache + ", " + resp.http.X-Cache; }
   else { set resp.http.X-Cache = req.http.X-Cache; }
 
@@ -470,10 +462,7 @@ sub query
                                         + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content
                                         + {"", "ProbeVersion" : "1.1.0""}
                                         );
-          if (req.http.Cookie !~ "MPP-SessionId" && var.get_string("eMeterSessionId") != "")
-          {
-             var.set_string("eMeterCookie", req.http.Cookie + "; MPP-SessionId=" + var.get_string("eMeterSessionId"));
-          }
+
           if (var.get_string("eMeterCookie") != "")
           {
               var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Cookie" : ""} + var.get_string("eMeterCookie") + {"""});
@@ -515,10 +504,4 @@ sub query
       }
     {{ end }}
   {{ end }}
-}
-
-sub remapMppParam {
-if (req.url ~ "mpu=") {
-    var.set_string("eMeterSessionId", regsuball(req.url, "[-_A-z0-9+()%.\/:]+\?mpu=", ""));
-  }
 }
