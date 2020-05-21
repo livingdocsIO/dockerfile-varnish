@@ -139,6 +139,8 @@ sub vcl_recv {
     return (synth(222, req.http.status));
   }
 
+  call query;
+
   if (req.http.Error-Status) {
     set req.http.host = "error";
     {{ if $ERROR_PAGE }}
@@ -356,9 +358,6 @@ sub vcl_deliver {
   unset resp.http.Surrogate-Control;
   unset resp.http.X-Varnish-Grace;
 
-  # Calling query for MPP
-  call query;
-
   return (deliver);
 }
 
@@ -413,13 +412,13 @@ sub vcl_synth {
         if (var.get_string("eMeterLocation") != "")
         {
             set resp.status = 302;
-            if (var.get_string("eMeterLocation") ~ "\?")
+            if (req.url !~ "\?")
             {
-                set resp.http.Location = var.get_string("eMeterLocation") + "&rid=https://" + req.http.Host + req.url;
+                set resp.http.Location = "https://" + req.http.Host + req.url + "?" + var.get_string("eMeterLocation");
             }
             else
             {
-                set resp.http.Location = var.get_string("eMeterLocation") + "?rid=https://" + req.http.Host + req.url;
+                set resp.http.Location = "https://" + req.http.Host + req.url + "&" + var.get_string("eMeterLocation");
             }
             var.clear();
             return (deliver);
@@ -449,14 +448,21 @@ sub vcl_fini {
   return (ok);
 }
 
+sub cleanup_url
+{
+   if (req.url ~ "(\?|&)(lid|pid)=") {
+      set req.url = regsuball(req.url, "(rid|pid)=[-_A-z0-9+()%.]+&?", "");
+      set req.url = regsub(req.url, "[?|&]+$", "");
+   }
+}
+
 sub query  
 {
   {{ if(getenv "E_METER_URL") }}
     {{ if (getenv "E_METER_X_TOKEN") }}
       if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
           && req.url != "/" 
-          && req.url ~ "-li.[0-9]*"
-          && resp.http.X-Paid-Content == "true")
+          && req.url ~ "-li.[0-9]*")
       {
           var.set_string("eMeterUrl", "{{ getenv "E_METER_URL" }}");
           var.set_string("eMeterTokenId", "{{ getenv "E_METER_X_TOKEN" }}");
@@ -466,7 +472,6 @@ sub query
                                         + {"", "EndUserClientIp" : ""} + client.ip
                                         + {"", "EndUserClientIdentity" : ""} + client.identity
                                         + {"", "VarnishServerIp" : ""}  + server.ip
-                                        + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content
                                         + {"", "ProbeVersion" : "1.1.0""}
                                         );
 
@@ -502,9 +507,30 @@ sub query
                       var.set_string("eMeterLocation", curl.header("Location"));
                       if (var.get_string("eMeterLocation") != "")
                       {
-                          return (synth(751, "eMeter redirection"));
+                        if (var.get_string("eMeterLocation") ~ "lid=" && req.url !~ "(\?|&)lid=true")
+                        {
+                            return (synth(751, "eMeter redirection"));
+                        }
+                        if(var.get_string("eMeterLocation") ~ "pid=" && req.url !~ "(\?|&)pid=true")
+                        {
+                            var.set_string("eMeterLocation", regsub(var.get_string("eMeterLocation"), "lid=true", ""));
+                            return (synth(751, "eMeter redirection"));
+                        }
+
+                      }
+                      else
+                      {
+                         call cleanup_url;
                       }
                   }
+                  else
+                  {
+                     call cleanup_url;
+                  }
+              }
+              else
+              {
+                 call cleanup_url;
               }
           }
           curl.free();
