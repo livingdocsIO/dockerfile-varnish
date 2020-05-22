@@ -507,11 +507,19 @@ sub query
                       var.set_string("eMeterLocation", curl.header("Location"));
                       if (var.get_string("eMeterLocation") != "")
                       {
-                        if (var.get_string("eMeterLocation") ~ "lid=" && req.url !~ "(\?|&)lid=true")
+                        if(req.url ~ "lid=[-_A-z0-9+()%.]") {
+                            set req.url = regsuball(req.url, "lid=[-_A-z0-9+()%.]+", "lid=true");
+                        }
+
+                        if(req.url ~ "pid=[-_A-z0-9+()%.]") {
+                            set req.url = regsuball(req.url, "pid=[-_A-z0-9+()%.]+", "pid=true");
+                        }
+
+                        if (var.get_string("eMeterLocation") ~ "lid=true" && req.url !~ "(\?|&)lid=true" )
                         {
                             return (synth(751, "eMeter redirection"));
                         }
-                        if(var.get_string("eMeterLocation") ~ "pid=" && req.url !~ "(\?|&)pid=true")
+                        if(var.get_string("eMeterLocation") ~ "pid=true" && req.url !~ "(\?|&)pid=true")
                         {
                             var.set_string("eMeterLocation", regsub(var.get_string("eMeterLocation"), "lid=true", ""));
                             return (synth(751, "eMeter redirection"));
