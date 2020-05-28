@@ -451,7 +451,7 @@ sub vcl_fini {
 sub cleanup_url
 {
    if (req.url ~ "(\?|&)(lid|pid)=") {
-      set req.url = regsuball(req.url, "(rid|pid)=[-_A-z0-9+()%.]+&?", "");
+      set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
       set req.url = regsub(req.url, "[?|&]+$", "");
    }
 }
@@ -524,7 +524,10 @@ sub query
                             var.set_string("eMeterLocation", regsub(var.get_string("eMeterLocation"), "lid=true", ""));
                             return (synth(751, "eMeter redirection"));
                         }
-
+                        if(var.get_string("eMeterLocation") !~ "pid=true" && req.url ~ "(\?|&)pid=true")
+                        {
+                            call cleanup_url;
+                        }
                       }
                       else
                       {
