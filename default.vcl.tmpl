@@ -448,14 +448,6 @@ sub vcl_fini {
   return (ok);
 }
 
-sub cleanup_url
-{
-   if (req.url ~ "(\?|&)(lid|pid)=") {
-      set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
-      set req.url = regsub(req.url, "[?|&]+$", "");
-   }
-}
-
 sub query  
 {
   {{ if(getenv "E_METER_URL") }}
@@ -526,22 +518,34 @@ sub query
                         }
                         if(var.get_string("eMeterLocation") !~ "pid=true" && req.url ~ "(\?|&)pid=true")
                         {
-                            call cleanup_url;
+                             if (req.url ~ "(\?|&)(lid|pid)=") {
+                                  set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
+                                  set req.url = regsub(req.url, "[?|&]+$", "");
+                               }
                         }
                       }
                       else
                       {
-                         call cleanup_url;
+                          if (req.url ~ "(\?|&)(lid|pid)=") {
+                               set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
+                               set req.url = regsub(req.url, "[?|&]+$", "");
+                            }
                       }
                   }
                   else
                   {
-                     call cleanup_url;
+                      if (req.url ~ "(\?|&)(lid|pid)=") {
+                           set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
+                           set req.url = regsub(req.url, "[?|&]+$", "");
+                        }
                   }
               }
               else
               {
-                 call cleanup_url;
+                  if (req.url ~ "(\?|&)(lid|pid)=") {
+                       set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
+                       set req.url = regsub(req.url, "[?|&]+$", "");
+                    }
               }
           }
           curl.free();
