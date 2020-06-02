@@ -139,8 +139,6 @@ sub vcl_recv {
     return (synth(222, req.http.status));
   }
 
-  call query;
-
   if (req.http.Error-Status) {
     set req.http.host = "error";
     {{ if $ERROR_PAGE }}
@@ -349,6 +347,8 @@ sub vcl_deliver {
     unset resp.http.Last-Modified;
   }
 
+  call query;
+
   # Remove some headers
   unset resp.http.url;
   unset resp.http.Server;
@@ -450,6 +450,7 @@ sub vcl_fini {
 
 sub query  
 {
+if(resp.http.X-Paid-Content == "true"){
   {{ if(getenv "E_METER_URL") }}
     {{ if (getenv "E_METER_X_TOKEN") }}
       if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
@@ -552,4 +553,5 @@ sub query
       }
     {{ end }}
   {{ end }}
+  }
 }
