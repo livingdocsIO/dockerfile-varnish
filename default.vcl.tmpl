@@ -501,10 +501,14 @@ sub query
                       {
                         if(req.url ~ "lid=[-_A-z0-9+()%.]") {
                             set req.url = regsuball(req.url, "lid=[-_A-z0-9+()%.]+", "lid=true");
+                            set req.url = regsuball(req.url, "pid=[-_A-z0-9+()%.]+", "");
+                            set req.url = regsub(req.url, "&", "");
                         }
 
                         if(req.url ~ "pid=[-_A-z0-9+()%.]") {
                             set req.url = regsuball(req.url, "pid=[-_A-z0-9+()%.]+", "pid=true");
+                            set req.url = regsuball(req.url, "lid=[-_A-z0-9+()%.]+", "");
+                            set req.url = regsub(req.url, "&", "");
                         }
 
                         if (var.get_string("eMeterLocation") ~ "lid=true" && req.url !~ "(\?|&)lid=true" )
