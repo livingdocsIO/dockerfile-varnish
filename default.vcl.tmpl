@@ -139,8 +139,6 @@ sub vcl_recv {
     return (synth(222, req.http.status));
   }
 
-    call query;
-
   if (req.http.Error-Status) {
     set req.http.host = "error";
     {{ if $ERROR_PAGE }}
@@ -358,6 +356,8 @@ sub vcl_deliver {
   unset resp.http.Surrogate-Control;
   unset resp.http.X-Varnish-Grace;
 
+  call query;
+
   return (deliver);
 }
 
@@ -454,7 +454,8 @@ sub query
     {{ if (getenv "E_METER_X_TOKEN") }}
       if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
           && req.url != "/" 
-          && req.url ~ "-li.[0-9]*")
+          && req.url ~ "-li.[0-9]*"
+          && resp.http.X-Paid-Content == "true") 
       {
           var.set_string("eMeterUrl", "{{ getenv "E_METER_URL" }}");
           var.set_string("eMeterTokenId", "{{ getenv "E_METER_X_TOKEN" }}");
@@ -464,6 +465,7 @@ sub query
                                         + {"", "EndUserClientIp" : ""} + client.ip
                                         + {"", "EndUserClientIdentity" : ""} + client.identity
                                         + {"", "VarnishServerIp" : ""}  + server.ip
+                                        + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content 
                                         + {"", "ProbeVersion" : "1.1.0""}
                                         );
 
@@ -492,63 +494,41 @@ sub query
           if (curl.status() > 0)
           {
               var.set_string("eMeterAllowAccess", curl.header("AllowAccess"));
+              var.set_string("eMeterLocation", curl.header("Location"));
               if (var.get_string("eMeterAllowAccess") != "")
               {
                   if (var.get_string("eMeterAllowAccess") == "false")
                   {
-                      var.set_string("eMeterLocation", curl.header("Location"));
                       if (var.get_string("eMeterLocation") != "")
                       {
-                        if(req.url ~ "lid=[-_A-z0-9+()%.]") {
-                            set req.url = regsuball(req.url, "lid=[-_A-z0-9+()%.]+", "lid=true");
-                            set req.url = regsuball(req.url, "pid=[-_A-z0-9+()%.]+", "");
-                            set req.url = regsub(req.url, "&", "");
-                        }
-
-                        if(req.url ~ "pid=[-_A-z0-9+()%.]") {
-                            set req.url = regsuball(req.url, "pid=[-_A-z0-9+()%.]+", "pid=true");
-                            set req.url = regsuball(req.url, "lid=[-_A-z0-9+()%.]+", "");
-                            set req.url = regsub(req.url, "&", "");
-                        }
-
                         if (var.get_string("eMeterLocation") ~ "lid=true" && req.url !~ "(\?|&)lid=true" )
                         {
                             return (synth(751, "eMeter redirection"));
                         }
-                        if(var.get_string("eMeterLocation") ~ "pid=true" && req.url !~ "(\?|&)pid=true")
+                        if (var.get_string("eMeterLocation") ~ "pid=true" && req.url !~ "(\?|&)pid=true")
                         {
                             var.set_string("eMeterLocation", regsub(var.get_string("eMeterLocation"), "lid=true", ""));
                             return (synth(751, "eMeter redirection"));
-                        }
-                        if(var.get_string("eMeterLocation") !~ "pid=true" && req.url ~ "(\?|&)pid=true")
-                        {
-                             if (req.url ~ "(\?|&)(lid|pid)=") {
-                                  set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
-                                  set req.url = regsub(req.url, "[?|&]+$", "");
-                               }
                         }
                       }
                       else
                       {
                           if (req.url ~ "(\?|&)(lid|pid)=") {
-                               set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
-                               set req.url = regsub(req.url, "[?|&]+$", "");
+                                return (synth(751, "eMeter redirection"));
                             }
                       }
                   }
                   else
                   {
                       if (req.url ~ "(\?|&)(lid|pid)=") {
-                           set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
-                           set req.url = regsub(req.url, "[?|&]+$", "");
+                            return (synth(751, "eMeter redirection"));
                         }
                   }
               }
               else
               {
                   if (req.url ~ "(\?|&)(lid|pid)=") {
-                       set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
-                       set req.url = regsub(req.url, "[?|&]+$", "");
+                        return (synth(751, "eMeter redirection"));
                     }
               }
           }
