@@ -139,6 +139,14 @@ sub vcl_recv {
     return (synth(222, req.http.status));
   }
 
+  # Preventing the scenario where the user can add another letter after lid=true, which will remove the block
+  if (req.url ~ "(\?|&)lid=true") {
+    set req.url = regsuball(req.url, "lid=[-_A-z0-9+()%.]+", "lid=true");
+  }
+  if (req.url ~ "(\?|&)pid=true") {
+    set req.url = regsuball(req.url, "pid=[-_A-z0-9+()%.]+", "pid=true");
+  }
+
   if (req.http.Error-Status) {
     set req.http.host = "error";
     {{ if $ERROR_PAGE }}
@@ -507,17 +515,20 @@ sub query
                   {
                       if (var.get_string("eMeterLocation") != "")
                       {
-                        if (var.get_string("eMeterLocation") ~ "lid=true" && req.url != "(\?|&)lid=true" )
+                        if (var.get_string("eMeterLocation") ~ "lid=true" && req.url !~ "(\?)lid=true")
                         {
-                            set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
-                            set req.url = regsub(req.url, "[?|&]+$", "");
+                            set req.url = regsuball(req.url, "(\?)(.*)", "");
                             return (synth(751, "eMeter redirection"));
                         }
-                        if (var.get_string("eMeterLocation") ~ "pid=true" && req.url != "(\?|&)pid=true")
+                        if (var.get_string("eMeterLocation") ~ "pid=true" && req.url !~ "(\?)pid=true")
                         {
-                            set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
-                            set req.url = regsub(req.url, "[?|&]+$", "");
+                            set req.url = regsuball(req.url, "(\?)(.*)", "");
                             var.set_string("eMeterLocation", regsub(var.get_string("eMeterLocation"), "lid=true", ""));
+                            return (synth(751, "eMeter redirection"));
+                        }
+                        if (req.url ~ "(\?|&)lid=true" && req.url ~ "(\?|&)pid=true")
+                        {
+                            set req.url = regsuball(req.url, "(\?)(.*)", "");
                             return (synth(751, "eMeter redirection"));
                         }
                       }
