@@ -273,16 +273,9 @@ sub vcl_backend_response {
 
   # Make sure that varnish always saves the gzipped content, even
   # when the backend just returns raw text content
-  if (beresp.http.content-type ~ "text/(plain|xml|css|html)"
-      || beresp.http.content-type ~ "javascript"
-      || beresp.http.content-type ~ "font-(ttf|opentype|woff)"
-      || beresp.http.content-type ~ "application/vnd\.ms-fontobject"
-      || beresp.http.content-type ~ "image/svg"
-   ) {
+  if (beresp.http.content-type ~ "(text|javascript|json|xml|font)") {
     set beresp.do_gzip = true;
-  }
-
-  if (beresp.http.content-type ~ "(webp|jpeg|bmp|tiff|gif|png|woff|tar|rar|zip|pdf)") {
+  } else {
     set beresp.do_stream = true;
   }
 
