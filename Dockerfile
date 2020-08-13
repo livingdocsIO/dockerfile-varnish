@@ -4,15 +4,15 @@ RUN go get -d github.com/jonnenauha/prometheus_varnish_exporter github.com/kelse
 RUN cd /go/src/github.com/jonnenauha/prometheus_varnish_exporter && git checkout 1.5.2 && go build -ldflags "-X 'main.Version=1.5.2' -X 'main.VersionHash=$(git rev-parse --short HEAD)' -X 'main.VersionDate=$(date -u '+%d.%m.%Y %H:%M:%S')'" -o /go/bin/prometheus_varnish_exporter
 RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go build -ldflags "-X 'main.GitSHA=$(git rev-parse --short HEAD)'" -o /go/bin/confd
 
-FROM alpine:3.11
+FROM alpine:3.12
 ENV VARNISH_VERSION=6.4.0-r0
 
 RUN echo 'Install utils that stay in the image' \
   && apk add --no-cache bash ca-certificates bind-tools nano curl procps \
   && echo 'Install varnish' \
-  && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --no-cache varnish=$VARNISH_VERSION \
+  && apk add --no-cache varnish=$VARNISH_VERSION \
   && echo 'Install varnish-modules' \
-  && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main --virtual varnish-deps --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
+  && apk add --virtual varnish-deps --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
   && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.4' --single-branch \
   && cd /varnish-modules && ./bootstrap && ./configure && make && make install && cd / \
   && echo 'Install libvmod-curl' \
