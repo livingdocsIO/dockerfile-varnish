@@ -422,7 +422,7 @@ sub vcl_synth {
     else {set req.http.Error-Status = resp.status;}
     return (restart);
   }
-  {{ else }}
+  {{ end }}
 
   if (resp.status == 301) {
     set resp.http.location = resp.reason;
