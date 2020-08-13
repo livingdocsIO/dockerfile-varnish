@@ -11,7 +11,8 @@ docker build -t livingdocs/varnish .
 ### Run
 
 ```
-docker run --rm -it -e BACKEND=example.com:80 -p 8080:80 -p 6081:6081 --name varnish livingdocs/varnish
+node fake/index.js
+docker run --rm -it -e BACKEND=host.docker.internal:8081 -p 8080:80 -p 6081:6081 --name varnish livingdocs/varnish
 
 # test
 curl -H 'Host: example.com' localhost:8080

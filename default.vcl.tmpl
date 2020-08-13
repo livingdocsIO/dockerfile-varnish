@@ -289,7 +289,6 @@ sub vcl_backend_fetch {
 # Called after the response headers has been successfully retrieved from the backend.
 sub vcl_backend_response {
   if (bereq.uncacheable) { return (deliver); }
-  set beresp.http.url = bereq.url;
 
   # We don't use any cookies, remove them to prevent security issues
   unset beresp.http.Set-Cookie;
@@ -346,7 +345,6 @@ sub vcl_backend_response {
   // Varnish suggests to save the url on a header,
   // so their ban() logic is more performant
   set beresp.http.url = bereq.url;
-  set beresp.http.host = bereq.http.host;
 
   # Support X-Cache-Tags headers for xkey, remove the original header
   if (beresp.http.X-Cache-Tags) {
@@ -357,6 +355,9 @@ sub vcl_backend_response {
 
 # Called before a cached/fresh object is delivered to the client.
 sub vcl_deliver {
+  // Always serve a synth response because we don't want to waste the bandwidth
+  if (req.method == "PURGE") { return (synth(resp.status, "Purged")); }
+
   if (resp.http.Follow-Error-Status) {
     set req.http.Error-Status = resp.http.Follow-Error-Status;
     return (restart);
@@ -393,7 +394,7 @@ sub vcl_deliver {
   unset resp.http.Via;
   unset resp.http.X-Generator;
   unset resp.http.Surrogate-Control;
-  unset resp.http.X-Varnish-Grace;
+  unset resp.http.xkey;
 
   return (deliver);
 }
