@@ -415,11 +415,15 @@ sub vcl_backend_error {
 }
 
 sub vcl_synth {
+  {{ if $ERROR_PAGE }}
   if (resp.status == 503 && req.http.host != "error") {
     if (resp.http.Follow-Error-Status) {set req.http.Error-Status = resp.http.Follow-Error-Status;}
     else {set req.http.Error-Status = resp.status;}
     return (restart);
-  } else if (resp.status == 301) {
+  }
+  {{ else }}
+
+  if (resp.status == 301) {
     set resp.http.location = resp.reason;
   } else if (resp.status == 302) {
     set resp.http.location = resp.reason;
