@@ -408,7 +408,7 @@ sub vcl_synth {
 
   if (req.http.Accept == "application/json") {
     set resp.http.Content-Type = "application/json; charset=utf-8";
-    set resp.body = {{ template "vstr" `{"status":${resp.status}$,"error":"${resp.reason}$"}`}};
+    set resp.body = {{ template "vstr" `{"status":${resp.status}$,"message":"${resp.reason}$"}`}};
   } else if (req.http.Accept == "text/html") {
     set resp.http.Content-Type = "text/html; charset=utf-8";
     set resp.body = {{ template "vstr" `<!DOCTYPE html><html><head><title>${resp.status}$ ${resp.reason}$</title></head><body><h1>${resp.status}$ ${resp.reason}$</h1></body></html>`}};
