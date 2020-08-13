@@ -117,7 +117,16 @@ sub vcl_init {
 {{ end }}
 }
 
+sub can_purge {
+  # purge_acl is an ACL defined above, we check the ip is in there
+  if (client.ip !~ purge_acl) {
+    return (synth(405, "The IP '" + client.ip + "' is not allowed to send " + req.method +  " requests."));
+  }
+}
+
 sub vcl_recv {
+  if (!req.http.host) { set req.http.host = "" + server.ip; }
+
   if (req.url == "/favicon.ico" || req.url == "/status") {
     std.log("nolog:true");
   } else if (req.url == "/_health") {
@@ -166,26 +175,26 @@ sub vcl_recv {
   else if (req.http.Accept ~ "text/plain") { set req.http.Accept = "text/plain"; }
   else { set req.http.Accept = "text/html"; }
 
-  # Allow purging
+  # BAN is a hard ban. The object won't ever served again in the frontend
   if (req.method == "BAN") {
-    # purge_acl is an ACL defined above, we check the ip is in there
-    if (client.ip !~ purge_acl) {
-      return (synth(405, "The IP '" + client.ip + "' is not allowed to send " + req.method +  " requests."));
-    }
-
-    if (req.http.xkey) {
-      set req.http.xkey-purged = xkey.softpurge(req.http.xkey);
-      return (synth(200, "Invalidated " + req.http.xkey-purged + " objects"));
-    } else if (req.http.ban) {
-      ban(req.http.ban);
-      return (synth(200, "Banned"));
-    } else {
-      ban("obj.http.url ~ " + req.url);
-      return (synth(200, "Banned"));
-    }
+    call can_purge;
+    if (req.http.X-Cache-Tags) { ban("obj.http.xkey ~ " + req.http.X-Cache-Tags); }
+    else if (req.http.ban) { ban(req.http.ban); }
+    else { purge.hard(); }
+    return (synth(200, "Banned"));
   }
 
-  if (req.method == "PURGE") { return (hash); }
+  # PURGE is a soft ban. The object will still be served, but refreshed in the background
+  if (req.method == "PURGE") {
+    call can_purge;
+    if (req.http.X-Cache-Tags) {
+      xkey.softpurge(req.http.X-Cache-Tags);
+      return (synth(200, "Purged"));
+    }
+
+    if (req.http.Cache-Control ~ "no-cache") { set req.hash_always_miss = true; }
+    return (hash);
+  }
 
   # Support websockets
   if (req.http.upgrade ~ "(?i)websocket") { return (pipe); }
@@ -236,8 +245,7 @@ sub vcl_pipe {
 # and the hashed data will later on get concatenated by the default vcl_hash.
 sub vcl_hash {
   # Cache based on hostname or ip
-  if (req.http.host) { hash_data(req.http.host); }
-  else { hash_data(server.ip); }
+  hash_data(req.http.host);
 
   # Cache based on user agent
   if (req.http.User-Agent ~ "^[a-zA-Z0-9-]+$") { hash_data(req.http.User-Agent); }
@@ -247,6 +255,26 @@ sub vcl_hash {
 
   # Cache based on url
   hash_data(req.url);
+}
+
+sub custom_purge {
+  purge.soft();
+  // Only wait for a refresh of the object when a Cache-Control: no-cache header is used
+  if (!req.hash_always_miss) { return (synth(200, "Purged")); }
+}
+
+sub vcl_hit {
+  if (req.method == "PURGE") { call custom_purge; }
+  if (obj.ttl >= 0s) { set req.http.X-Cache = "HIT"; }
+  else if (obj.ttl + obj.grace > 0s) { set req.http.X-Cache = "STALE"; }
+  else if (obj.ttl + obj.grace + obj.keep > 0s) { set req.http.X-Cache = "KEEP"; }
+  return (deliver);
+}
+
+sub vcl_miss {
+  if (req.method == "PURGE") { call custom_purge; }
+  set req.http.X-Cache = "MISS";
+  return (fetch);
 }
 
 sub vcl_backend_fetch {
@@ -310,7 +338,21 @@ sub vcl_backend_response {
 
   # Allow stale content, in case the backend goes down.
   # We make Varnish keep all objects for 24 hours (default_grace config) beyond their TTL
-  if (beresp.http.X-Varnish-Grace) { set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s"); }
+  if (beresp.http.X-Varnish-Grace) {
+    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s");
+    unset beresp.http.X-Varnish-Grace;
+  }
+
+  // Varnish suggests to save the url on a header,
+  // so their ban() logic is more performant
+  set beresp.http.url = bereq.url;
+  set beresp.http.host = bereq.http.host;
+
+  # Support X-Cache-Tags headers for xkey, remove the original header
+  if (beresp.http.X-Cache-Tags) {
+    set beresp.http.xkey = beresp.http.X-Cache-Tags;
+    unset beresp.http.X-Cache-Tags;
+  }
 }
 
 # Called before a cached/fresh object is delivered to the client.
@@ -354,20 +396,6 @@ sub vcl_deliver {
   unset resp.http.X-Varnish-Grace;
 
   return (deliver);
-}
-
-sub vcl_hit {
-  if (req.method == "PURGE") { purge.soft(); return (synth(200, "Purged")); }
-  if (obj.ttl >= 0s) { set req.http.X-Cache = "HIT"; }
-  else if (obj.ttl + obj.grace > 0s) { set req.http.X-Cache = "STALE"; }
-  else if (obj.ttl + obj.grace + obj.keep > 0s) { set req.http.X-Cache = "KEEP"; }
-  return (deliver);
-}
-
-sub vcl_miss {
-  if (req.method == "PURGE") { return (synth(200, "Purged")); }
-  set req.http.X-Cache = "MISS";
-  return (fetch);
 }
 
 sub vcl_backend_error {
