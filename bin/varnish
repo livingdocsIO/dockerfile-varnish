@@ -15,5 +15,7 @@ exec varnishd -F -f $VARNISH_CONFIG \
   -p http_resp_size=262144 \
   -p shortlived=360 \
   -p workspace_backend=128k \
+  -p workspace_client=128k \
+  -p workspace_session=0.75k \
   -p syslog_cli_traffic=off \
   $VARNISH_RUNTIME_PARAMETERS
