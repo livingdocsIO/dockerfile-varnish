@@ -486,6 +486,7 @@ sub vcl_fini {
   return (ok);
 }
 
+{{ if (getenv "E_METER_URL") }}{{ if (getenv "E_METER_X_TOKEN") }}
 sub paywall_subroutine {
   if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
       && req.url != "/"
@@ -551,3 +552,4 @@ sub paywall_subroutine {
       curl.free();
   }
 }
+  {{ end }}{{ end }}
