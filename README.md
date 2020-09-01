@@ -5,7 +5,7 @@ The Varnish setup we at Livingdocs currently use for the delivery.
 ### Build
 
 ```bash
-docker build -t livingdocs/varnish .
+docker build -t forwardpublishing/varnish-paywall .
 ```
 
 ### Run
