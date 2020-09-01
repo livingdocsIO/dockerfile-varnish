@@ -118,7 +118,16 @@ sub vcl_init {
 {{ end }}
 }
 
+sub can_purge {
+  # purge_acl is an ACL defined above, we check the ip is in there
+  if (client.ip !~ purge_acl) {
+    return (synth(405, "The IP '" + client.ip + "' is not allowed to send " + req.method +  " requests."));
+  }
+}
+
 sub vcl_recv {
+  if (!req.http.host) { set req.http.host = "" + server.ip; }
+
   if (req.url == "/favicon.ico" || req.url == "/status") {
     std.log("nolog:true");
   } else if (req.url == "/_health") {
@@ -136,6 +145,7 @@ sub vcl_recv {
         return (synth(405, "The IP '" + client.ip + "' is not allowed to send a POST /_health request."));
       }
     }
+
     return (synth(222, req.http.status));
   }
 
@@ -174,26 +184,26 @@ sub vcl_recv {
   else if (req.http.Accept ~ "text/plain") { set req.http.Accept = "text/plain"; }
   else { set req.http.Accept = "text/html"; }
 
-  # Allow purging
+  # BAN is a hard ban. The object won't ever served again in the frontend
   if (req.method == "BAN") {
-    # purge_acl is an ACL defined above, we check the ip is in there
-    if (client.ip !~ purge_acl) {
-      return (synth(405, "The IP '" + client.ip + "' is not allowed to send " + req.method +  " requests."));
-    }
-
-    if (req.http.xkey) {
-      set req.http.xkey-purged = xkey.softpurge(req.http.xkey);
-      return (synth(200, "Invalidated " + req.http.xkey-purged + " objects"));
-    } else if (req.http.ban) {
-      ban(req.http.ban);
-      return (synth(200, "Banned"));
-    } else {
-      ban("obj.http.url ~ " + req.url);
-      return (synth(200, "Banned"));
-    }
+    call can_purge;
+    if (req.http.X-Cache-Tags) { ban("obj.http.xkey ~ " + req.http.X-Cache-Tags); }
+    else if (req.http.ban) { ban(req.http.ban); }
+    else { purge.hard(); }
+    return (synth(200, "Banned"));
   }
 
-  if (req.method == "PURGE") { return (hash); }
+  # PURGE is a soft ban. The object will still be served, but refreshed in the background
+  if (req.method == "PURGE") {
+    call can_purge;
+    if (req.http.X-Cache-Tags) {
+      xkey.softpurge(req.http.X-Cache-Tags);
+      return (synth(200, "Purged"));
+    }
+
+    if (req.http.Cache-Control ~ "no-cache") { set req.hash_always_miss = true; }
+    return (hash);
+  }
 
   # Support websockets
   if (req.http.upgrade ~ "(?i)websocket") { return (pipe); }
@@ -243,8 +253,7 @@ sub vcl_pipe {
 # and the hashed data will later on get concatenated by the default vcl_hash.
 sub vcl_hash {
   # Cache based on hostname or ip
-  if (req.http.host) { hash_data(req.http.host); }
-  else { hash_data(server.ip); }
+  hash_data(req.http.host);
 
   # Cache based on user agent
   if (req.http.User-Agent ~ "^[a-zA-Z0-9-]+$") { hash_data(req.http.User-Agent); }
@@ -254,6 +263,26 @@ sub vcl_hash {
 
   # Cache based on url
   hash_data(req.url);
+}
+
+sub custom_purge {
+  purge.soft();
+  // Only wait for a refresh of the object when a Cache-Control: no-cache header is used
+  if (!req.hash_always_miss) { return (synth(200, "Purged")); }
+}
+
+sub vcl_hit {
+  if (req.method == "PURGE") { call custom_purge; }
+  if (obj.ttl >= 0s) { set req.http.X-Cache = "HIT"; }
+  else if (obj.ttl + obj.grace > 0s) { set req.http.X-Cache = "STALE"; }
+  else if (obj.ttl + obj.grace + obj.keep > 0s) { set req.http.X-Cache = "KEEP"; }
+  return (deliver);
+}
+
+sub vcl_miss {
+  if (req.method == "PURGE") { call custom_purge; }
+  set req.http.X-Cache = "MISS";
+  return (fetch);
 }
 
 sub vcl_backend_fetch {
@@ -277,16 +306,9 @@ sub vcl_backend_response {
 
   # Make sure that varnish always saves the gzipped content, even
   # when the backend just returns raw text content
-  if (beresp.http.content-type ~ "text/(plain|xml|css|html)"
-      || beresp.http.content-type ~ "javascript"
-      || beresp.http.content-type ~ "font-(ttf|opentype|woff)"
-      || beresp.http.content-type ~ "application/vnd\.ms-fontobject"
-      || beresp.http.content-type ~ "image/svg"
-   ) {
+  if (beresp.http.content-type ~ "(text|javascript|json|xml|font)") {
     set beresp.do_gzip = true;
-  }
-
-  if (beresp.http.content-type ~ "(webp|jpeg|bmp|tiff|gif|png|woff|tar|rar|zip|pdf)") {
+  } else {
     set beresp.do_stream = true;
   }
 
@@ -321,11 +343,27 @@ sub vcl_backend_response {
 
   # Allow stale content, in case the backend goes down.
   # We make Varnish keep all objects for 24 hours (default_grace config) beyond their TTL
-  if (beresp.http.X-Varnish-Grace) { set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s"); }
+  if (beresp.http.X-Varnish-Grace) {
+    set beresp.grace = std.duration(beresp.http.X-Varnish-Grace + "s");
+    unset beresp.http.X-Varnish-Grace;
+  }
+
+  // Varnish suggests to save the url on a header,
+  // so their ban() logic is more performant
+  set beresp.http.url = bereq.url;
+
+  # Support X-Cache-Tags headers for xkey, remove the original header
+  if (beresp.http.X-Cache-Tags) {
+    set beresp.http.xkey = beresp.http.X-Cache-Tags;
+    unset beresp.http.X-Cache-Tags;
+  }
 }
 
 # Called before a cached/fresh object is delivered to the client.
 sub vcl_deliver {
+  // Always serve a synth response because we don't want to waste the bandwidth
+  if (req.method == "PURGE") { return (synth(resp.status, "Purged")); }
+
   if (resp.http.Follow-Error-Status) {
     set req.http.Error-Status = resp.http.Follow-Error-Status;
     return (restart);
@@ -362,25 +400,11 @@ sub vcl_deliver {
   unset resp.http.Via;
   unset resp.http.X-Generator;
   unset resp.http.Surrogate-Control;
-  unset resp.http.X-Varnish-Grace;
+  unset resp.http.xkey;
 
   call query;
 
   return (deliver);
-}
-
-sub vcl_hit {
-  if (req.method == "PURGE") { purge.soft(); return (synth(200, "Purged")); }
-  if (obj.ttl >= 0s) { set req.http.X-Cache = "HIT"; }
-  else if (obj.ttl + obj.grace > 0s) { set req.http.X-Cache = "STALE"; }
-  else if (obj.ttl + obj.grace + obj.keep > 0s) { set req.http.X-Cache = "KEEP"; }
-  return (deliver);
-}
-
-sub vcl_miss {
-  if (req.method == "PURGE") { return (synth(200, "Purged")); }
-  set req.http.X-Cache = "MISS";
-  return (fetch);
 }
 
 sub vcl_backend_error {
@@ -400,11 +424,15 @@ sub vcl_backend_error {
 }
 
 sub vcl_synth {
+  {{ if $ERROR_PAGE }}
   if (resp.status == 503 && req.http.host != "error") {
     if (resp.http.Follow-Error-Status) {set req.http.Error-Status = resp.http.Follow-Error-Status;}
     else {set req.http.Error-Status = resp.status;}
     return (restart);
-  } else if (resp.status == 301) {
+  }
+  {{ end }}
+
+  if (resp.status == 301) {
     set resp.http.location = resp.reason;
   } else if (resp.status == 302) {
     set resp.http.location = resp.reason;
@@ -413,7 +441,7 @@ sub vcl_synth {
   } else if (resp.status == 222) {
     set resp.status = std.integer(resp.reason, 503);
   }
-  
+
   {{ if(getenv "E_METER_URL") }}
     if (resp.status == 751)
     {
@@ -447,7 +475,7 @@ sub vcl_synth {
 
   if (req.http.Accept == "application/json") {
     set resp.http.Content-Type = "application/json; charset=utf-8";
-    set resp.body = {{ template "vstr" `{"status":${resp.status}$,"error":"${resp.reason}$"}`}};
+    set resp.body = {{ template "vstr" `{"status":${resp.status}$,"message":"${resp.reason}$"}`}};
   } else if (req.http.Accept == "text/html") {
     set resp.http.Content-Type = "text/html; charset=utf-8";
     set resp.body = {{ template "vstr" `<!DOCTYPE html><html><head><title>${resp.status}$ ${resp.reason}$</title></head><body><h1>${resp.status}$ ${resp.reason}$</h1></body></html>`}};
@@ -455,6 +483,7 @@ sub vcl_synth {
     set resp.http.Content-Type = "text/plain; charset=utf-8";
     set resp.body = {{ template "vstr" `${resp.status}$ ${resp.reason}$` }};
   }
+
   return (deliver);
 }
 
@@ -462,24 +491,24 @@ sub vcl_fini {
   return (ok);
 }
 
-sub query  
+sub query
 {
   {{ if(getenv "E_METER_URL") }}
     {{ if (getenv "E_METER_X_TOKEN") }}
       if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
-          && req.url != "/" 
+          && req.url != "/"
           && req.url ~ "-li.[0-9]*"
-          && resp.http.X-Paid-Content == "true") 
+          && resp.http.X-Paid-Content == "true")
       {
           var.set_string("eMeterUrl", "{{ getenv "E_METER_URL" }}");
           var.set_string("eMeterTokenId", "{{ getenv "E_METER_X_TOKEN" }}");
           var.set_string("eMeterCookie", req.http.Cookie);
-          var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + var.get_string("eMeterTokenId")  
+          var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + var.get_string("eMeterTokenId")
                                         + {"", "REQUEST_URI" : ""} + req.http.host + req.url
                                         + {"", "EndUserClientIp" : ""} + client.ip
                                         + {"", "EndUserClientIdentity" : ""} + client.identity
                                         + {"", "VarnishServerIp" : ""}  + server.ip
-                                        + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content 
+                                        + {"", "PaidArticle" : ""}  + resp.http.X-Paid-Content
                                         + {"", "ProbeVersion" : "1.1.0""}
                                         );
 
