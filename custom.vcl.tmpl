@@ -541,9 +541,7 @@ sub paywall_subroutine {
             set req.url = regsuball(req.url, "(\?)(.*)", "");
             return (synth(751, "eMeter redirection"));
           }
-        }
-
-        if (req.url ~ "(\?|&)(lid|pid)=") {
+        } else if (req.url ~ "(\?|&)(lid|pid)=") {
           set req.url = regsuball(req.url, "(lid|pid)=[-_A-z0-9+()%.]+&?", "");
           set req.url = regsub(req.url, "[?|&]+$", "");
           return (synth(751, "eMeter redirection"));
