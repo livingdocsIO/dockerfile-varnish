@@ -36,13 +36,14 @@ All configuration is done using environment variables.
 
 ### Varnish Backend Options
 * `BACKEND` the hostname:port of the backend, supports comma delimited values
+* `BACKEND_FETCH_RETRIES`, optional, default: 1
 * `BACKEND_MAX_CONNECTIONS`, optional, default: 75
-* `BACKEND_FIRST_BYTES_TIMEOUT`, optional, default: 10s
-* `BACKEND_BETWEEN_BYTES_TIMEOUT`, optional, default: 5s
-* `BACKEND_CONNECT_TIMEOUT`, optional, default: 5s
+* `BACKEND_FIRST_BYTES_TIMEOUT`, optional, default: 30s
+* `BACKEND_BETWEEN_BYTES_TIMEOUT`, optional, default: 30s
+* `BACKEND_CONNECT_TIMEOUT`, optional, default: 0.7s
 * `BACKEND_PROBE`, optional, default: false
 * `BACKEND_PROBE_URL`, optional, default: /status
-* `BACKEND_PROBE_INTERVAL`, optional, default: 1s
+* `BACKEND_PROBE_INTERVAL`, optional, default: 2s
 * `BACKEND_PROBE_TIMEOUT`, optional, default: 1s
 * `BACKEND_PROBE_WINDOW`, optional, default: 3
 * `BACKEND_PROBE_THRESHOLD`, optional, default: 2
