@@ -1,4 +1,4 @@
-# Varnish
+# [Varnish](https://github.com/livingdocsIO/dockerfile-varnish) [![](https://img.shields.io/docker/automated/livingdocs/varnish.svg)](https://hub.docker.com/r/livingdocs/varnish)
 
 The Varnish setup we at Livingdocs currently use for the delivery.
 
