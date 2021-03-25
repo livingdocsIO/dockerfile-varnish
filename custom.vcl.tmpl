@@ -490,7 +490,6 @@ sub vcl_fini {
 sub paywall_subroutine {
   if (req.http.host + req.url !~ "\.(gif|ico|jpg|jpeg|png|css|js|woff)"
       && req.url != "/"
-      && req.url ~ "-li.[0-9]*"
       && resp.http.X-Paid-Content == "true"
   ) {
       var.set_string("eMeterQuery", {"{ "X-TokenId" : ""} + "{{ getenv "E_METER_X_TOKEN" }}"
