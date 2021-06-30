@@ -10,6 +10,7 @@ import xkey;
 import purge;
 import var;
 import curl;
+import cookie;
 
 {{ if eq (getenv "BACKEND_PROBE") "true" }}
 probe delivery_probe {
@@ -234,6 +235,12 @@ sub vcl_recv {
   unset req.http.X-Cache;
 
   {{ getenv "VARNISH_CUSTOM_SCRIPT" "" }}
+
+  if (req.http.Cookie) {
+    cookie.parse(req.http.Cookie);
+    cookie.keep("MPP-SessionId");
+    set req.http.Cookie = cookie.get_string();
+  }
 
   return (hash);
 }
