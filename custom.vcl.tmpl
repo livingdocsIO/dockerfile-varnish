@@ -508,6 +508,10 @@ sub paywall_subroutine {
         + {"", "ProbeVersion" : "1.1.0""}
       );
 
+      if (resp.http.X-Free-Showcase == "true") {
+        var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "FreeShowcase" : ""} + resp.http.X-Free-Showcase + {"""});
+      }
+
       if (req.http.Cookie != "") {
         var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "Cookie" : ""} + req.http.Cookie + {"""});
       }
