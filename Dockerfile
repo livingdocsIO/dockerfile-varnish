@@ -5,23 +5,19 @@ RUN cd /go/src/github.com/jonnenauha/prometheus_varnish_exporter && git checkout
 RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go build -ldflags "-X 'main.GitSHA=$(git rev-parse --short HEAD)'" -o /go/bin/confd
 
 FROM alpine
-ENV VARNISH_VERSION=6.5.1-r0
+ENV VARNISH_VERSION=6.6.1-r0
 
 RUN echo 'Install utils that stay in the image' \
   && apk add --no-cache bash ca-certificates bind-tools nano curl procps \
   && echo 'Install varnish' \
-  && apk add --no-cache varnish=$VARNISH_VERSION \
+  && apk add --no-cache varnish=$VARNISH_VERSION --repository http://dl-3.alpinelinux.org/alpine/edge/main/ \
   && echo 'Install varnish-modules' \
-  && apk add --virtual varnish-deps --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make \
-  && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.5' --single-branch \
+  && apk add --virtual varnish-deps --no-cache git libgit2-dev automake varnish-dev=$VARNISH_VERSION autoconf libtool py-docutils make --repository http://dl-3.alpinelinux.org/alpine/edge/main/ \
+  && git clone https://github.com/varnish/varnish-modules.git --depth='1' --branch='6.6' --single-branch \
   && cd /varnish-modules && ./bootstrap && ./configure && make && make install && cd / \
-  && echo 'Install libvmod-curl' \
-  && apk add --virtual curl-deps --no-cache libcurl \
-  && git clone https://github.com/varnish/libvmod-curl.git --depth='1' --branch='6.3' --single-branch \
-  && cd /libvmod-curl && ./autogen.sh && ./configure && make && (make check || (cat src/test-suite.log >&2)) && make install && cd / \
   && echo 'Remove all build deps' \
-  && rm -Rf /varnish-modules /libvmod-curl \
-  && apk del varnish-deps curl-deps
+  && rm -Rf /varnish-modules \
+  && apk del varnish-deps
 
 COPY --from=go /go/bin/* /bin/
 
