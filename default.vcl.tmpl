@@ -178,8 +178,8 @@ sub vcl_recv {
   # BAN is a hard ban. The object won't ever served again in the frontend
   if (req.method == "BAN") {
     call can_purge;
-    if (req.http.X-Cache-Tags) { ban("obj.http.xkey ~ " + req.http.X-Cache-Tags); }
-    else if (req.http.ban) { ban(req.http.ban); }
+    if (req.http.X-Cache-Tags) { std.ban("obj.http.xkey ~ " + req.http.X-Cache-Tags); }
+    else if (req.http.ban) { std.ban(req.http.ban); }
     else { purge.hard(); }
     return (synth(200, "Banned"));
   }
@@ -343,7 +343,7 @@ sub vcl_backend_response {
   }
 
   // Varnish suggests to save the url on a header,
-  // so their ban() logic is more performant
+  // so their std.ban() logic is more performant
   set beresp.http.url = bereq.url;
 
   # Support X-Cache-Tags headers for xkey, remove the original header
