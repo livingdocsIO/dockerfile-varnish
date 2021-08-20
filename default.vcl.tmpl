@@ -179,8 +179,9 @@ sub vcl_recv {
   if (req.method == "BAN") {
     call can_purge;
     if (req.http.X-Cache-Tags) { std.ban("obj.http.xkey ~ " + req.http.X-Cache-Tags); }
+    else if (req.http.X-Cache-Ban) { std.ban(req.http.X-Cache-Ban); }
     else if (req.http.ban) { std.ban(req.http.ban); }
-    else { purge.hard(); }
+    else { return (purge); }
     return (synth(200, "Banned"));
   }
 
