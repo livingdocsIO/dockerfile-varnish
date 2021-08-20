@@ -4,7 +4,7 @@ RUN go get -d github.com/jonnenauha/prometheus_varnish_exporter github.com/kelse
 RUN cd /go/src/github.com/jonnenauha/prometheus_varnish_exporter && git checkout 1.5.2 && go build -ldflags "-X 'main.Version=1.5.2' -X 'main.VersionHash=$(git rev-parse --short HEAD)' -X 'main.VersionDate=$(date -u '+%d.%m.%Y %H:%M:%S')'" -o /go/bin/prometheus_varnish_exporter
 RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go build -ldflags "-X 'main.GitSHA=$(git rev-parse --short HEAD)'" -o /go/bin/confd
 
-FROM alpine
+FROM alpine:3.14.1
 ENV VARNISH_VERSION=6.6.1-r0
 
 RUN echo 'Install utils that stay in the image' \
