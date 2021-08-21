@@ -56,8 +56,7 @@ PROCESSES_IDX=()
 KILL_BEFORE_EXIT=()
 KILL_BEFORE_EXIT_PIDS=()
 
-EXIT_SIGNAL=
-EXIT_CODE=
+EXIT_PID=
 EXIT_PROCESS=
 
 track () {
@@ -81,35 +80,39 @@ track () {
   fi
 }
 
-exited_process_name () {
-  for idx in "${PROCESSES_IDX[@]}"; do
-    local found=$(ps -p "${PROCESSES_PIDS[idx]}" -o pid= || echo)
-    if [ "$found" == "" ]; then echo "${PROCESSES[idx]}" && return 0; fi
-  done
-  return 0
-}
-
 handle_signal () {
+  local EXIT_CODE="$?"
+  local EXIT_SIGNAL="$1"
   trap - ERR
-  trap '' SIGINT SIGTERM
+  trap '' EXIT SIGINT SIGTERM SIGKILL
 
   # There's always a ^C when we do a manual cancel.
   # I want to have the next log on the next line, so it looks prettier
   >&2 echo
 
-  if [ "$EXIT_SIGNAL" != "" ]; then return 0; fi
-  EXIT_SIGNAL="$1";
-  EXIT_CODE="${2:-0}" EXIT_PROCESS="$(exited_process_name)"
-  handle_shutdown
+  for idx in "${PROCESSES_IDX[@]}"; do
+    if [ "${PROCESSES_PIDS[idx]}" == "$EXIT_PID" ]; then EXIT_PROCESS="${PROCESSES[idx]}"; fi
+  done
+
+  if [ "$EXIT_PROCESS" == "" ]; then EXIT_PROCESS=entrypoint; fi
+  handle_shutdown "$EXIT_CODE" "$EXIT_SIGNAL"
 }
 
 handle_shutdown () {
-  [ "$EXIT_SIGNAL" != "SIGKILL" ] && log EXITING with $EXIT_SIGNAL
-  [ "$EXIT_SIGNAL" == "SIGKILL" ] && log EXITING with ERROR in $EXIT_PROCESS and exit code $EXIT_CODE
+  local EXIT_CODE="$1"
+  local EXIT_SIGNAL="$2"
+  local EXIT_DETAILS=""
+  if [ "$EXIT_PROCESS" != "" ]; then EXIT_DETAILS=" of $EXIT_PROCESS"; fi
+  if [ "$EXIT_CODE" != "" ]; then EXIT_DETAILS="$EXIT_DETAILS and exit code $EXIT_CODE"; fi
+
+  [ "$EXIT_SIGNAL" != "SIGKILL" ] && log EXITING with $EXIT_SIGNAL$EXIT_DETAILS
+  [ "$EXIT_SIGNAL" == "SIGKILL" ] && log EXITING with ERROR$EXIT_DETAILS
   trap "log EXITED with code $EXIT_CODE && exit $EXIT_CODE" EXIT
 
+  KILL_BEFORE_EXIT_PIDS=( "${KILL_BEFORE_EXIT_PIDS[@]/$EXIT_PID}" )
   if [ ${#KILL_BEFORE_EXIT_PIDS} -ne 0 ]; then
-    kill -s $EXIT_SIGNAL $KILL_BEFORE_EXIT_PIDS 2>&1 > /dev/null || true
+    kill -s $EXIT_SIGNAL $KILL_BEFORE_EXIT_PIDS >/dev/null 2>&1
+    wait -n $KILL_BEFORE_EXIT_PIDS >/dev/null 2>&1
   fi
 
   GRACEFUL="$(curl -s -XPOST -H 'health: 503' http://localhost:$VARNISH_PORT/_health || true)"
@@ -117,11 +120,10 @@ handle_shutdown () {
     log GRACEFUL SHUTDOWN, waiting for $VARNISH_SHUTDOWN_DELAY seconds.
     sleep $VARNISH_SHUTDOWN_DELAY
   fi
-  exec 2> /dev/null
-  pkill -TERM -P $$
+  pkill -TERM -P $$ >/dev/null 2>&1
 }
 
-trap 'handle_signal SIGKILL' ERR
+trap 'handle_signal SIGKILL' ERR SIGKILL
 trap 'handle_signal SIGTERM' SIGTERM EXIT
 trap 'handle_signal SIGINT' SIGINT
 
@@ -129,4 +131,4 @@ track /bin/varnish LOG_TO_STDERR
 [ "$VARNISH_ACCESS_LOG" == "true" ] && track /bin/varnish-logs
 track /bin/prometheus-varnish-exporter LOG_TO_STDERR
 track /bin/confd-reload-watch KILL_BEFORE_EXIT LOG_TO_STDERR
-wait -n
+wait -p EXIT_PID -n >/dev/null 2>&1
