@@ -13,8 +13,8 @@ import var;
 {{ if eq (getenv "BACKEND_PROBE") "true" }}
 probe delivery_probe {
   .url = "{{ getenv "BACKEND_PROBE_URL" }}";
-  .interval = {{ getenv "BACKEND_PROBE_INTERVAL" }};
-  .timeout = {{ getenv "BACKEND_PROBE_TIMEOUT" }};
+  .interval = {{ getenv "BACKEND_PROBE_INTERVAL" }}s;
+  .timeout = {{ getenv "BACKEND_PROBE_TIMEOUT" }}s;
   .window = {{ getenv "BACKEND_PROBE_WINDOW" }};
   .threshold = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
   .initial = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
@@ -54,9 +54,9 @@ backend backend_delivery_{{ $backendIndex }}_{{ $ipIndex }} {
   .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
 
   .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" }};
-  .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" }}; # How long to wait before we receive a first byte from our backend?
-  .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" }};  # Max time to wait for next package in an http response
-  .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" }};  # How long to wait for a backend connection?
+  .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" }}s; # How long to wait before we receive a first byte from our backend?
+  .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" }}s;  # Max time to wait for next package in an http response
+  .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" }}s;  # How long to wait for a backend connection?
   {{ if eq (getenv "BACKEND_PROBE") "true" }}.probe = delivery_probe;{{ end }}
 }
   {{ end }}
