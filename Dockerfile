@@ -8,7 +8,7 @@ FROM alpine:3.14.1
 ENV VARNISH_VERSION=6.6.1-r0
 
 RUN echo 'Install utils that stay in the image' \
-  && apk add --no-cache bash ca-certificates bind-tools nano curl procps \
+  && apk add --no-cache bash ca-certificates bind-tools nano curl procps nodejs \
   && echo 'Install varnish' \
   && apk add --no-cache varnish=$VARNISH_VERSION --repository http://dl-3.alpinelinux.org/alpine/edge/main/ \
   && echo 'Install varnish-modules' \
@@ -26,7 +26,6 @@ ENV VARNISH_PORT=80
 ENV VARNISH_ADMIN_PORT=2000
 ENV PROMETHEUS_EXPORTER_PORT=9131
 
-COPY entrypoint.sh /entrypoint.sh
 COPY default.vcl.tmpl $VARNISH_CONFIG_TEMPLATE
 COPY varnish.toml /etc/confd/conf.d/varnish.toml
 COPY ./bin/* /bin/
@@ -34,4 +33,4 @@ COPY ./bin/* /bin/
 EXPOSE $VARNISH_PORT
 EXPOSE $VARNISH_ADMIN_PORT
 EXPOSE $PROMETHEUS_EXPORTER_PORT
-CMD ["/entrypoint.sh"]
+CMD ["/bin/entrypoint.js"]

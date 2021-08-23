@@ -1,5 +1,0 @@
-#!/bin/bash
-trap "exit 0" SIGINT SIGTERM
-exec 1> >(awk '{gsub(/(....\/..\/.. ..:..:.. )/, "", $0); print strftime("%Y-%m-%dT%H:%M:%SZ",systime()) " [varnish-exporter]: " $0}') 2>&1
-sleep 3
-exec prometheus_varnish_exporter -web.listen-address :$PROMETHEUS_EXPORTER_PORT

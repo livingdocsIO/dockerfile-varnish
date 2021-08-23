@@ -1,3 +1,0 @@
-#!/bin/bash
-exec 1> >(awk '{gsub(/(^.*\/bin\/confd\[[0-9]+\]: )/,"", $0); print strftime("%Y-%m-%dT%H:%M:%SZ",systime()) " [confd-reload-synconly]: " $0}') 2>&1
-exec /bin/confd --log-level info --onetime --sync-only --backend env
