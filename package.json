@@ -1,0 +1,25 @@
+{
+  "name": "dockerfile-varnish",
+  "version": "1.0.0",
+  "description": "The Varnish setup we at Livingdocs currently use for the delivery.",
+  "main": "index.js",
+  "bin": {
+    "dockerfile-varnish": "config.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/upfrontIO/dockerfile-varnish.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/upfrontIO/dockerfile-varnish/issues"
+  },
+  "homepage": "https://github.com/upfrontIO/dockerfile-varnish#readme",
+  "dependencies": {
+    "ejs": "^3.1.6"
+  }
+}
