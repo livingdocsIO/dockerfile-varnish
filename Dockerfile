@@ -7,6 +7,10 @@ RUN cd /go/src/github.com/kelseyhightower/confd && git checkout v0.15.0 && go bu
 FROM alpine:3.14.1
 ENV VARNISH_VERSION=6.6.1-r0
 
+ENV VARNISH_CONFIG_TEMPLATE='/etc/confd/templates/varnish.vcl.tmpl'
+COPY default.vcl.tmpl $VARNISH_CONFIG_TEMPLATE
+COPY varnish.toml /etc/confd/conf.d/varnish.toml
+
 RUN echo 'Install utils that stay in the image' \
   && apk add --no-cache bash ca-certificates bind-tools nano curl procps nodejs \
   && echo 'Install varnish' \
@@ -17,18 +21,17 @@ RUN echo 'Install utils that stay in the image' \
   && cd /varnish-modules && ./bootstrap && ./configure && make && make install && cd / \
   && echo 'Remove all build deps' \
   && rm -Rf /varnish-modules \
-  && apk del varnish-deps
+  && apk del varnish-deps \
+  && chown -R varnish:varnish /etc/varnish /etc/confd
 
 COPY --from=go /go/bin/* /bin/
+COPY ./bin/* /bin/
 
-ENV VARNISH_CONFIG_TEMPLATE='/etc/confd/templates/varnish.vcl.tmpl'
-ENV VARNISH_PORT=80
+ENV VARNISH_PORT=8080
 ENV VARNISH_ADMIN_PORT=2000
 ENV PROMETHEUS_EXPORTER_PORT=9131
 
-COPY default.vcl.tmpl $VARNISH_CONFIG_TEMPLATE
-COPY varnish.toml /etc/confd/conf.d/varnish.toml
-COPY ./bin/* /bin/
+USER varnish
 
 EXPOSE $VARNISH_PORT
 EXPOSE $VARNISH_ADMIN_PORT
