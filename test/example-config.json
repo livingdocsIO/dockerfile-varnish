@@ -1,0 +1,29 @@
+{
+  "listenAddress": "0.0.0.0:8080,HTTP",
+  "adminListenAddress": "0.0.0.0:2000",
+  "adminSecret": null,
+  "adminSecretFile": "/etc/varnish/secret",
+  "vcl": [{"name": "default", "src": "../default.vcl.ejs"}],
+  "probes": [{
+    "name": "delivery",
+    "url": "/status",
+    "interval": "2s",
+    "timeout": "1s",
+    "window": "3",
+    "threshold": "2"
+  }],
+  "clusters": [{
+    "name": "delivery",
+    "probe": "delivery",
+    "address": ["host.docker.internal:8081"]
+  }],
+  "parameters": {
+    "feature": "+http2,+esi_disable_xml_check",
+    "default_grace": 86400,
+    "default_keep": 3600,
+    "default_ttl": 1,
+    "backend_idle_timeout": 65,
+    "timeout_idle": 60,
+    "syslog_cli_traffic": "off"
+  }
+}

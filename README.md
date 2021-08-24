@@ -1,6 +1,14 @@
 # [Varnish](https://github.com/livingdocsIO/dockerfile-varnish) [![](https://img.shields.io/docker/automated/livingdocs/varnish.svg)](https://hub.docker.com/r/livingdocs/varnish)
 
-The Varnish setup we at Livingdocs currently use for the delivery.
+A varnish setup with config hot reloading, ready to use in kubernetes and dockerized environments.
+
+It includes:
+- A templating setup
+- Hot reloading by watching for file changes
+- Config reloads using `SIGHUP` signal
+- A prometheus exporter running on port `9131`
+- Automatic dns reloads
+- Automatically apply varnish parameters on startup or config change
 
 ### Build
 
@@ -10,54 +18,210 @@ docker build -t livingdocs/varnish .
 
 ### Run
 
-```
-node fake/index.js
-docker run --rm -it -e BACKEND=host.docker.internal:8081 -p 8080:80 -p 6081:6081 --name varnish livingdocs/varnish
+### Without config file
 
-# test
-curl -H 'Host: example.com' localhost:8080
+For simplicity, there's one 
+
+```bash
+docker run --rm -it -e BACKEND=host.docker.internal:8081 -p 8080:8080 --name varnish livingdocs/varnish
+```
+
+### With config file
+```bash
+echo '
+{
+  "listenAddress": "0.0.0.0:8080",
+  "watchFiles": true,
+  "watchDns": false,
+  "clusters": [{"name": "default", "address": "host.docker.internal:8081"}]
+}
+' > config.json
+
+docker run --rm -it -v $PWD:/etc/varnish/ -p 8080:8080 --name varnish livingdocs/varnish
 ```
 
 ## Configuration options
 
-All configuration is done using environment variables.
+Config file changes are watched and trigger a reload within varnish.
+The configuration can also be reloaded using a `SIGHUP` signal against the main process.
 
-### Varnish Daemon Options
-* `VARNISH_PORT`, optional, default: 8080
-* `VARNISH_ADMIN_PORT`, optional, default: 2000
-* `VARNISH_ADMIN_SECRET_FILE`, optional, default: `VARNISH_ADMIN_SECRET` env variable
-* `VARNISH_ADMIN_SECRET`, optional, default to a random string
-* `VARNISH_CACHE_SIZE`, optional, default: 512m
-* `VARNISH_CACHE_TTL`, optional, default: 4m
-* `VARNISH_CACHE_GRACE`, optional, default: 24h
-* `VARNISH_CACHE_KEEP`, optional, default: 1h
-* `VARNISH_RUNTIME_PARAMETERS`, optional
-* `VARNISH_ACCESS_LOG`, optional, default: true, log frontend requests
+The configuration gets passed to the VCL templates.
+You can add custom variables, that gets passed down.
 
-### Varnish Backend Options
-* `BACKEND` the hostname:port of the backend, supports comma delimited values
-* `BACKEND_FETCH_RETRIES`, optional, default: 1
-* `BACKEND_MAX_CONNECTIONS`, optional, default: 75
-* `BACKEND_FIRST_BYTES_TIMEOUT`, optional, default: 30s
-* `BACKEND_BETWEEN_BYTES_TIMEOUT`, optional, default: 30s
-* `BACKEND_CONNECT_TIMEOUT`, optional, default: 0.7s
-* `BACKEND_PROBE`, optional, default: false
-* `BACKEND_PROBE_URL`, optional, default: /status
-* `BACKEND_PROBE_INTERVAL`, optional, default: 2s
-* `BACKEND_PROBE_TIMEOUT`, optional, default: 1s
-* `BACKEND_PROBE_WINDOW`, optional, default: 3
-* `BACKEND_PROBE_THRESHOLD`, optional, default: 2
-* `REMOTE_BACKEND`, optional, the host:port of additional backends you can use for example with ESI
+```js
+{
+  // Static Configurations
+  //
+  // Any varnish listen option is supported
+  "listenAddress": "0.0.0.0:8080,HTTP",
+  "adminListenAddress": "0.0.0.0:2000",
+  "prometheusListenAddress": ":9131",
+  // Command args that directly get passed to the process
+  // e.g. to add a secondary listen address, you could pass the option
+  "varnishRuntimeParameters": ["-a", "/path/to/listen.sock"],
+  // The varnish storage configuration
+  "storage": "default,512m",
+  // Define a custom secret for the admin port
+  // By default one gets generated and
+  // written to the secret file.
+  // If the secret file already contains a value,
+  // that one is preferred
+  "adminSecret": null,
+  "adminSecretFile": "/etc/varnish/secret",
+  // Enable http access logs to stdout
+  "varnishAccessLogs": true,
+  // During the shutdown period,
+  // varnish will serve a 503 error on /_health
+  "shutdownDelay": "5s",
 
-### VCL Configuration Options
-* `ERROR_PAGE`, optional, an html page that is shown for every 5xx error instead of the regular server response. You can set it to something like `/error` or `http://some-error-page/error?code={{code}}`
-  - Attention, https doesn't work
-  - Use a `{{code}}` placeholder, which will be replaced with the error code.
-* `PURGE_IP_WHITELIST`: a list of ip addresses that are allowed to purge pages. by default we've whitelisted the private networks.
-* `VARNISH_STRIP_QUERYSTRING`: Forces varnish to remove all the query strings from a url before it gets sent to a backend, default: false
-* `HOSTNAME` and `HOSTNAME_PREFIX`: By default we set a `x-served-by` header on the response of a request in varnish. Because the hostname is automatically set in docker, we've added a prefix, to make it more customizable.
-* `VARNISH_CUSTOM_SCRIPT`: Allows us to inject some script at the end of the `vcl_recv` function.
+  // Dynamic Configurations
+  //
+  // You can explicitly disable file watches that trigger a config reload
+  // 'kill -SIGHUP 1' against the running process will
+  // also reload the configuration.
+  "watchFiles": true,
+  "watchDns": true,
+  // Varnish serves requests with a X-Served-By header
+  // You can customize it here. {{hostname}} gets replaced automatically
+  "xServedBy": "{{hostname}}"
+  // You can declare multiple vcls and reference them
+  // in the top vcl config that gets loaded
+  "vcl": [{
+    "name": "default",
+    // The configurations are relative to the config file
+    // So this would be `/etc/varnish/default.vcl.ejs`
+    // We only watch for file changes in /etc/varnish, so better keep this
+    "src": "default.vcl.ejs",
+    // By default the destination of the final file is
+    // the template without the ejs extension in the 'generated' directory.
+    "dest": "generated/default.vcl"
+    "top": true
+  }, {
+    "name": "secondary",
+    "src": "secondary.vcl.ejs"
+  }],
+  // Probes that can get referenced in the cluster.probe config
+  "probes": [{
+    // only this is mandatory, the rest are defaults
+    // Within the vcl, we name the probe probe_delivery
+    // as varnish needs unique names
+    "name": "delivery",
+    "url": "/status",
+    "interval": "5s",
+    "timeout": "4s",
+    "window": "3",
+    "threshold": "2",
+    "initial": null
+  }],
+  "acl": [{
+    // The purge acl is required in the default vcl config
+    "name": 'purge',
+    "entries": [
+      '# localhost',
+      'localhost',
+      '127.0.0.1',
+      '::1',
+      '# Private networks',
+      '10.0.0.0/8',
+      '172.16.0.0/12',
+      '192.168.0.0/16'
+    ]
+  }],
+  "clusters": [{
+    "name": "delivery",
+    // One hostname
+    // A round robin director gets created automatically
+    // that points to all the ip addresses behind a record.
+    // The director name will be cluster.name, in that case 'delivery'.
+    "address": "host.docker.internal:8081".
+    // Or multiple
+    "address": ["host.docker.internal:8081"],
+    // Configure a probe declared on the root
+    "probe": "delivery",
+    // Define some backend parameters for every backend in the cluster
+    // Varnish defaults will be used if not declared
+    "maxConnections": null,
+    "firstByteTimeout": null,
+    "betweenBytesTimeout": null,
+    "connectTimeout": null
+  }],
+  // Enable background fetches in case a request fails
+  // This is set to 1 by default
+  "fetchRetries": 1,
+  // Always remove all the query strings before
+  // a request gets hashed and sent to a backend
+  "stripQueryString": false,
+  // Any varnish parameter that gets loaded on start and file change
+  // Those are the defaults if the parameter object is not present
+  "parameters": {
+    "feature": "+http2,+esi_disable_xml_check",
+    "default_grace": 86400,
+    "default_keep": 3600,
+    "default_ttl": 1,
+    "backend_idle_timeout": 65,
+    "timeout_idle": 60,
+    "syslog_cli_traffic": "off"
+  },
+  // Instead of completely customizing the VCL built into the image
+  // you could also just use those hooks, which get placed at the specific location.
+  "hooks": {
+    "import": "",
+    "global": "",
+    "vclInit": "",
+    "vclRecvStart": "",
+    "vclRecvBackendHint": "",
+    "vclRecvCenter": "",
+    "vclRecvEnd": "",
+    "vclHash": "",
+    "vclDeliverStart": "",
+    "vclDeliverEnd": "",
+    "vclSynthStart": "",
+    "vclSynthEnd": ""
+  }
+}
+```
 
+## Templating
 
-### Prometheus exporter Options
-* `PROMETHEUS_EXPORTER_PORT`, optional, default 9131
+In the config.vcl declaration, you can configure multiple template source files,
+which should be present in in `/etc/varnish/`.
+With such a configuration:
+`{"vcl": [{"name": "something", "src": "something.vcl.ejs"}]}`
+
+The file should get placed at `/etc/varnish/something.vcl.ejs`.
+On build, the file lands in `/etc/varnish/generated/something.vcl`.
+
+We're using [EJS](https://ejs.co/) templates to generate the final varnish configuration.
+You can use any `config.*` variable in the template to generate the configuration.
+
+```
+<%= config.something || '' %>
+```
+
+### Includes
+
+There are few specific includes supported:
+
+Probe:
+```
+<% for (const probe of config.probes) { %><%- include('probe', probe) %><% } -%>
+```
+
+Backend:
+```
+<% for (const cluster of config.clusters) { %><%- include('backend', cluster) %><% } -%>
+```
+
+ACL:
+```
+<% for (const acl of config.acl) { %><%- include('acl', {"name": "purge", "entries:}) %><% } -%>
+
+// or
+
+<%- include('acl', {"name": "purge", "entries": ["127.0.0.1"]}) %>
+```
+
+Director:
+```
+<% for (const cluster of config.clusters) { %><%- include('director', cluster) -%><% } %>
+```

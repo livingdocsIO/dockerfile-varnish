@@ -1,7 +1,3 @@
-{{- define "vstr" -}}
-"{{ replace (replace (replace . `"` `" + {"""} + "` -1) `${` `" +` -1) `}$` `+ "` -1}}"
-{{- end }}
-
 vcl 4.1;
 
 import std;
@@ -9,122 +5,29 @@ import directors;
 import xkey;
 import purge;
 import var;
+<%- config.hooks?.import || '' %>
 
-{{ if eq (getenv "BACKEND_PROBE") "true" }}
-probe delivery_probe {
-  .url = "{{ getenv "BACKEND_PROBE_URL" }}";
-  .interval = {{ getenv "BACKEND_PROBE_INTERVAL" }}s;
-  .timeout = {{ getenv "BACKEND_PROBE_TIMEOUT" }}s;
-  .window = {{ getenv "BACKEND_PROBE_WINDOW" }};
-  .threshold = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
-  .initial = {{ getenv "BACKEND_PROBE_THRESHOLD" }};
-}
-{{ end }}
+<% for (const probe of config.probes) { %><%- include('probe', probe) %><% } -%>
+<% for (const cluster of config.clusters) { %><%- include('backend', cluster) %><% } -%>
+<% for (const acl of config.acl) { %><%- include('acl', acl) %><% } -%>
 
-{{ $BACKENDS := (split (getenv "BACKEND") ",") }}
-{{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
-
-{{ $ERROR_PAGE := getenv "ERROR_PAGE" "" }}
-{{ $ERROR_PAGE_SEG := split $ERROR_PAGE "/" }}
-{{ $IS_ERROR_PAGE_REMOTE := eq "http:" (index $ERROR_PAGE_SEG 0) }}
-{{ define "ERROR_PAGE_PATH" -}}
-  {{- $ERROR_PAGE := getenv "ERROR_PAGE" "" -}}
-  {{- $ERROR_PAGE_SEG := split $ERROR_PAGE "/" -}}
-  {{- $IS_ERROR_PAGE_REMOTE := eq "http:" (index $ERROR_PAGE_SEG 0) -}}
-  {{- if $IS_ERROR_PAGE_REMOTE -}}
-    {{- replace $ERROR_PAGE (printf "http://%s" (index $ERROR_PAGE_SEG 2)) "" 1 -}}
-  {{- else -}}
-    {{- $ERROR_PAGE -}}
-  {{- end -}}
-{{- end -}}
-
-{{ if $IS_ERROR_PAGE_REMOTE }}
-backend backend_error {
-  {{- $backend := (split (index $ERROR_PAGE_SEG 2) ":") }}
-  .host = "{{ index $ERROR_PAGE_SEG 2 }}";
-  .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
-}
-{{ end }}
-
-{{ range $backendIndex, $hostnameWithPort := $BACKENDS }}
-  {{- $backend := (split $hostnameWithPort ":") }}
-  {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
-backend backend_delivery_{{ $backendIndex }}_{{ $ipIndex }} {
-  .host = "{{ $ip }}";
-  .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
-
-  .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" }};
-  .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" }}s; # How long to wait before we receive a first byte from our backend?
-  .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" }}s;  # Max time to wait for next package in an http response
-  .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" }}s;  # How long to wait for a backend connection?
-  {{ if eq (getenv "BACKEND_PROBE") "true" }}.probe = delivery_probe;{{ end }}
-}
-  {{ end }}
-{{ end }}
-
-{{ if (getenv "REMOTE_BACKEND") }}
-  # Remote backends are unmonitored backends that only
-  {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
-    {{ $backend := (split $hostnameWithPort ":") }}
-
-    {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
-backend backend_remote_{{ $backendIndex }}_{{ $ipIndex }} {
-  .host = "{{ $ip }}";
-  .port = "{{ if eq 2 (len $backend) }}{{ index $backend 1 }}{{ else }}80{{ end }}";
-}
-    {{ end }}
-  {{ end }}
-{{ end }}
-
-{{ $PURGE_IP_WHITELIST := (split (getenv "PURGE_IP_WHITELIST") ",") }}
-
-# allowed to purge
-acl purge_acl {
-  # Localhost
-  "localhost";
-  "127.0.0.1";
-  "::1";
-  # Private networks
-  "10.0.0.0"/8;
-  "172.16.0.0"/12;
-  "192.168.0.0"/16;
-  {{ range $i, $ipRange := $PURGE_IP_WHITELIST }}
-  {{ $ipRange }};
-  {{ end }}
-}
+<%- config.hooks?.global || '' %>
 
 sub vcl_init {
   var.global_set("health", "200");
-
-  new delivery = directors.round_robin();
-  {{- range $backendIndex, $hostnameWithPort := $BACKENDS -}}
-    {{- $backend := (split $hostnameWithPort ":") -}}
-    {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
-  delivery.add_backend(backend_delivery_{{ $backendIndex }}_{{ $ipIndex }});
-    {{- end -}}
-  {{- end }}
-
-{{ if (getenv "REMOTE_BACKEND") }}
-  {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
-  new remote_{{ $backendIndex }} = directors.round_robin();
-    {{- range $backendIndex, $hostnameWithPort := $BACKENDS -}}
-      {{- $backend := (split $hostnameWithPort ":") -}}
-      {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
-  remote_{{ $backendIndex }}.add_backend(backend_remote_{{ $backendIndex }}_{{ $ipIndex }});
-      {{- end -}}
-    {{- end }}
-  {{ end }}
-{{ end }}
+  <% for (const cluster of config.clusters) { %><%- include('director', cluster) -%><% } %>
+  <%- config.hooks?.vclInit || '' %>
 }
 
 sub can_purge {
-  # purge_acl is an ACL defined above, we check the ip is in there
-  if (client.ip !~ purge_acl) {
+  # acl_purge is an ACL defined above, we check the ip is in there
+  if (client.ip !~ acl_purge) {
     return (synth(405, "The IP '" + client.ip + "' is not allowed to send " + req.method +  " requests."));
   }
 }
 
 sub vcl_recv {
+  <%- config.hooks?.vclRecvStart || '' %>
   if (!req.http.host) { set req.http.host = "" + server.ip; }
 
   if (req.url == "/favicon.ico" || req.url == "/status") {
@@ -134,7 +37,7 @@ sub vcl_recv {
     set req.http.status = var.global_get("health");
 
     if (req.method == "POST") {
-      if (client.ip ~ purge_acl) {
+      if (client.ip ~ acl_purge) {
         set req.http.health = std.integer(req.http.health, 0);
         if (req.http.health !~ "^[2345]") {
           return (synth(405, "Cannot set the invalid health status code '" + req.http.health + "' using a POST /_health request."));
@@ -148,32 +51,19 @@ sub vcl_recv {
     return (synth(222, req.http.status));
   }
 
-  if (req.http.Error-Status) {
-    set req.http.host = "error";
-    {{ if $ERROR_PAGE }}
-    set req.url = regsub("{{ template "ERROR_PAGE_PATH" }}", "{{`{{code}}`}}", req.http.Error-Status);
-    {{ end }}
-    set req.backend_hint = {{ if $IS_ERROR_PAGE_REMOTE }}backend_error{{ else }}delivery.backend(){{ end }};
-  }
-  {{ if (getenv "REMOTE_BACKEND") }}
-  {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
-    {{- $backend := (split $hostnameWithPort ":") }}
-    {{- $hostname := (index $backend 0) }}
-  else if (req.http.host == "{{ $hostname }}") {
-    set req.backend_hint = remote_{{ $backendIndex }}.backend();
-  }
-  {{ end }}
-  {{ end }}
-  else {
-    set req.backend_hint = delivery.backend();
-  }
-
+  # Normalize the Accept Header, so we can cache based on that
   if (!req.http.Accept) { set req.http.Accept = "text/html"; }
   else if (req.http.Accept ~ "text/html") { set req.http.Accept = "text/html"; }
   else if (req.http.Accept ~ "application/json") { set req.http.Accept = "application/json"; }
   else if (req.http.Accept ~ "application/xml") { set req.http.Accept = "application/xml"; }
   else if (req.http.Accept ~ "text/plain") { set req.http.Accept = "text/plain"; }
   else { set req.http.Accept = "text/html"; }
+
+  <% if (config.hooks?.vclRecvBackendHint) { %>
+  <%- config.hooks?.vclRecvBackendHint %>
+  <% } else { %>
+  set req.backend_hint = <%- config.clusters[0].name %>.backend();
+  <% } %>
 
   # BAN is a hard ban. The object won't ever served again in the frontend
   if (req.method == "BAN") {
@@ -203,10 +93,10 @@ sub vcl_recv {
   # Only cache GET or HEAD requests. This makes sure the POST requests are always passed.
   if (req.method != "GET" && req.method != "HEAD" && req.method != "OPTIONS") { return (pass); }
 
-  {{ if eq (getenv "VARNISH_STRIP_QUERYSTRING") "true" }}
+  <% if (config.stripQueryString) { %>
   # Strip all query strings
   set req.url = regsub(req.url, "\?.*$", "");
-  {{ else }}
+  <% } else { %>
   # Some generic URL cleanup, useful for all templates that follow
   # First remove the Google Analytics added parameters, useless for our backend
   if (req.url ~ "(\?|&)(dmcid|fbclid|gclid|utm_[a-z]+|originalReferrer)=") {
@@ -220,14 +110,13 @@ sub vcl_recv {
 
   # Normalize the query arguments
   set req.url = std.querysort(req.url);
-  {{ end }}
+  <% } %>
 
   # Nuke all cookies
   unset req.http.Cookie;
   unset req.http.X-Cache;
 
-  {{ getenv "VARNISH_CUSTOM_SCRIPT" "" }}
-
+  <%- config.hooks?.vclRecvEnd || '' %>
   return (hash);
 }
 
@@ -254,6 +143,8 @@ sub vcl_hash {
 
   hash_data(req.http.Accept);
 
+  <%- config.hooks?.vclHash || '' %>
+
   # Cache based on url
   hash_data(req.url);
 }
@@ -279,8 +170,9 @@ sub vcl_miss {
 }
 
 sub vcl_backend_fetch {
+  // Support custom error pages
   if (bereq.retries > 0) {
-    if (bereq.http.host == "error") { set bereq.backend = {{ if $IS_ERROR_PAGE_REMOTE }}backend_error{{ else }}delivery.backend(){{ end }}; }
+    if (bereq.http.host == "error") { set bereq.backend = delivery.backend(); }
     else { set bereq.backend = delivery.backend(); }
   }
   return (fetch);
@@ -310,22 +202,9 @@ sub vcl_backend_response {
   # Directly pass 50x responses to handle_request_errors
   if (beresp.status >= 500 && beresp.status <= 504) {
     if (bereq.is_bgfetch) { return (abandon); }
-    if (bereq.retries < {{getenv "BACKEND_FETCH_RETRIES" "1"}}) { return (retry); }
+    if (bereq.retries < <%- config.fetchRetries %>) { return (retry); }
 
-    {{ if $ERROR_PAGE }}
-    if (bereq.http.host == "error") { return (abandon); }
     set beresp.ttl = 15s;
-    set beresp.http.Follow-Error-Status = beresp.status;
-    return (deliver);
-    {{ else }}
-    set beresp.ttl = 15s;
-    return (deliver);
-    {{ end }}
-  }
-
-  if (bereq.http.host == "error") {
-    set beresp.grace = 30d;
-    set beresp.ttl = 5m;
     return (deliver);
   }
 
@@ -360,23 +239,18 @@ sub vcl_backend_response {
 
 # Called before a cached/fresh object is delivered to the client.
 sub vcl_deliver {
+  <%- config.hooks?.vclDeliverStart || '' %>
   // Always serve a synth response because we don't want to waste the bandwidth
   if (req.method == "PURGE") { return (synth(resp.status, "Purged")); }
 
-  if (resp.http.Follow-Error-Status) {
-    set req.http.Error-Status = resp.http.Follow-Error-Status;
-    return (restart);
-  } else if (req.http.host == "error") {
-    set resp.status = std.integer(req.http.Error-Status, 500);
-    set resp.http.Follow-Error-Status = resp.status;
-  } else if (resp.http.Follow-Location == "true") {
+  if (resp.http.Follow-Location == "true") {
     set req.url = resp.http.Location;
     return (restart);
   }
 
   # Add Cache Grace Info to Response (set in vcl_hit)
-  if (resp.http.X-Served-By) { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}, " + resp.http.X-Served-By; }
-  else { set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}"; }
+  if (resp.http.X-Served-By) { set resp.http.X-Served-By = "<%- config.xServedBy %>, " + resp.http.X-Served-By; }
+  else { set resp.http.X-Served-By = "<%- config.xServedBy %>"; }
 
   if (resp.http.X-Cache) { set resp.http.X-Cache = req.http.X-Cache + ", " + resp.http.X-Cache; }
   else { set resp.http.X-Cache = req.http.X-Cache; }
@@ -401,34 +275,21 @@ sub vcl_deliver {
   unset resp.http.Surrogate-Control;
   unset resp.http.xkey;
 
+  <%- config.hooks?.vclDeliverEnd || '' %>
   return (deliver);
 }
 
 sub vcl_backend_error {
   if (bereq.is_bgfetch) { return (abandon); }
-  if (bereq.retries < {{getenv "BACKEND_FETCH_RETRIES" "1"}}) { return (retry); }
+  if (bereq.retries < <%- config.fetchRetries %>) { return (retry); }
 
-  {{ if $ERROR_PAGE }}
-  if (bereq.http.host == "error") { return (abandon); }
-  set beresp.ttl = 15s;
-  set beresp.http.Follow-Error-Status = beresp.status;
-  return (deliver);
-  {{ else }}
   set beresp.ttl = 15s;
   set beresp.grace = 0s;
   return (retry);
-  {{ end }}
 }
 
 sub vcl_synth {
-  {{ if $ERROR_PAGE }}
-  if (resp.status == 503 && req.http.host != "error") {
-    if (resp.http.Follow-Error-Status) {set req.http.Error-Status = resp.http.Follow-Error-Status;}
-    else {set req.http.Error-Status = resp.status;}
-    return (restart);
-  }
-  {{ end }}
-
+  <%- config.hooks?.vclSynthStart || '' %>
   if (resp.status == 301) {
     set resp.http.location = resp.reason;
   } else if (resp.status == 302) {
@@ -439,22 +300,23 @@ sub vcl_synth {
     set resp.status = std.integer(resp.reason, 503);
   }
 
-  set resp.http.X-Served-By = "{{getenv "HOSTNAME_PREFIX" ""}}{{getenv "HOSTNAME"}}";
+  set resp.http.X-Served-By = "<%- config.xServedBy %>";
   set resp.http.X-Cache = "SYNTH";
   unset resp.http.X-Varnish;
   unset resp.http.Server;
 
   if (req.http.Accept == "application/json") {
     set resp.http.Content-Type = "application/json; charset=utf-8";
-    set resp.body = {{ template "vstr" `{"status":${resp.status}$,"message":"${resp.reason}$"}`}};
+    set resp.body = <%- vstr(`{"status":{{resp.status}},"message":"{{resp.reason}}"}`) %>;
   } else if (req.http.Accept == "text/html") {
     set resp.http.Content-Type = "text/html; charset=utf-8";
-    set resp.body = {{ template "vstr" `<!DOCTYPE html><html><head><title>${resp.status}$ ${resp.reason}$</title></head><body><h1>${resp.status}$ ${resp.reason}$</h1></body></html>`}};
+    set resp.body = <%- vstr(`<!DOCTYPE html><html><head><title>{{resp.status}} {{resp.reason}}</title></head><body><h1>{{resp.status}} {{resp.reason}}</h1></body></html>`) %>;
   } else {
     set resp.http.Content-Type = "text/plain; charset=utf-8";
-    set resp.body = {{ template "vstr" `${resp.status}$ ${resp.reason}$` }};
+    set resp.body = <%- vstr(`{{resp.status}} {{resp.reason}}` ) %>;
   }
 
+  <%- config.hooks?.vclSynthEnd || '' %>
   return (deliver);
 }
 

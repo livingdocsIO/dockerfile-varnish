@@ -7,16 +7,16 @@ formats.h = formats.hour = formats.hours = formats.m * 60
 formats.d = formats.day = formats.days = formats.h * 24
 formats.w = formats.week = formats.weeks = formats.d * 7
 
-function toMs (str) {
+function toSeconds (str) {
   const nr = parseInt(str, 10)
   // eslint-disable-next-line eqeqeq
   if (nr == str) return nr
   if (!str) return null
 
   if (typeof str === 'number') {
-    throw new Error(`Input to toMs should be a valid number`)
+    throw new Error(`Input to toSeconds should be a valid number`)
   } else if (typeof str !== 'string') {
-    throw new Error(`Input to toMs should be a string`)
+    throw new Error(`Input to toSeconds should be a string`)
   }
 
   let result = null
@@ -33,4 +33,4 @@ function toMs (str) {
   throw new Error(`Time value contains invalid characters: ${JSON.stringify(str)}`)
 }
 
-module.exports = toMs
+module.exports = toSeconds
