@@ -152,7 +152,7 @@ function exec (opts) {
 
 const env = {
   VARNISH_CONFIG: process.env.VARNISH_CONFIG || '/etc/varnish/default.vcl',
-  VARNISH_PORT: process.env.VARNISH_PORT || "80",
+  VARNISH_PORT: process.env.VARNISH_PORT || "8080",
   VARNISH_ADMIN_PORT: process.env.VARNISH_ADMIN_PORT || "2000",
   VARNISH_ADMIN_SECRET_FILE: process.env.VARNISH_ADMIN_SECRET_FILE || "/etc/varnish/secret",
   BACKEND: process.env.BACKEND,

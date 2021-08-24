@@ -23,7 +23,7 @@ curl -H 'Host: example.com' localhost:8080
 All configuration is done using environment variables.
 
 ### Varnish Daemon Options
-* `VARNISH_PORT`, optional, default: 80
+* `VARNISH_PORT`, optional, default: 8080
 * `VARNISH_ADMIN_PORT`, optional, default: 2000
 * `VARNISH_ADMIN_SECRET_FILE`, optional, default: `VARNISH_ADMIN_SECRET` env variable
 * `VARNISH_ADMIN_SECRET`, optional, default to a random string
