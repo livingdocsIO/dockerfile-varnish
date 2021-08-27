@@ -238,7 +238,7 @@ sub vcl_recv {
 
   if (req.http.Cookie) {
     cookie.parse(req.http.Cookie);
-    cookie.keep("MPP-SessionId");
+    cookie.keep("MPP-SessionId,sso-sessionId,AccessToken");
     set req.http.Cookie = cookie.get_string();
   }
 
@@ -534,6 +534,10 @@ sub paywall_subroutine {
 
       if (resp.http.X-Paywall-Type != "") {
         var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "PaywallType" : ""} + resp.http.X-Paywall-Type + {"""});
+      }
+
+      if (req.http.X-Real-IP != "") {
+        var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "EndUserClientRealIp" : ""} + req.http.X-Real-IP + {"""});
       }
 
       var.set_string("eMeterQuery", var.get_string("eMeterQuery") + " }");
