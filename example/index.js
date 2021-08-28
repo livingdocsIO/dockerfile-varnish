@@ -10,6 +10,22 @@ const server = http.createServer(function (req, res) {
     return res.end()
   }
 
+  // Call curl localhost:8080/error-every/2 to get an error every 2nd request
+  let counters = {}
+  if (req.url.startsWith('/error-every/')) {
+    const count = parseInt(req.url.substring('/error-every/'.length))
+    counters[count] = (counters[count] || 0) + 1
+    if (counters[count] % count === 0) {
+      res.writeHead(500, {'X-Served-By': hostname, 'Content-Type': 'text/html'})
+      res.write('Error page: ' + req.url)
+      return res.end()
+    } else {
+      res.writeHead(200, {'X-Served-By': hostname, 'Content-Type': 'text/html'})
+      res.write('Success page: ' + req.url)
+      return res.end()
+    }
+  }
+
   if (req.url.startsWith('/500')) {
     res.writeHead(500, {'X-Served-By': hostname, 'Content-Type': 'text/html'})
     res.write('500 page: ' + req.url)
@@ -40,7 +56,7 @@ const server = http.createServer(function (req, res) {
 
   if (req.url.startsWith('/cache-tags')) {
     res.writeHead(200, {'X-Cache-Tags': 'something', 'Content-Type': 'text/html'})
-    res.write('X-Cache-Tags Header: something')
+    res.write('Header: X-Cache-Tags: something')
     return res.end()
   }
 
