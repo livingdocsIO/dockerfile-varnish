@@ -3,13 +3,14 @@ RUN apk add --no-cache git
 RUN go get -d github.com/jonnenauha/prometheus_varnish_exporter
 RUN cd /go/src/github.com/jonnenauha/prometheus_varnish_exporter && git checkout 1.6 && go build -ldflags "-X 'main.Version=1.6' -X 'main.VersionHash=$(git rev-parse --short HEAD)' -X 'main.VersionDate=$(date -u '+%d.%m.%Y %H:%M:%S')'" -o /go/bin/prometheus_varnish_exporter
 
-FROM livingdocs/node:16
+FROM node:16-alpine3.14
+WORKDIR /etc/varnish
 ENV VARNISH_VERSION=6.6.1-r0
 
-COPY --from=go /go/bin/* /bin/
+COPY --from=go /go/bin/* /usr/local/bin/
 
 RUN echo 'Install utils that stay in the image' \
-  && apk add --no-cache bash ca-certificates bind-tools nano curl procps tini \
+  && apk add --no-cache ca-certificates bind-tools nano curl tini \
   && echo 'Install varnish' \
   && apk add --no-cache varnish=$VARNISH_VERSION --repository http://dl-3.alpinelinux.org/alpine/edge/main/ \
   && echo 'Install varnish-modules' \
@@ -19,15 +20,21 @@ RUN echo 'Install utils that stay in the image' \
   && echo 'Remove all build deps' \
   && rm -Rf /varnish-modules \
   && apk del varnish-deps \
-  && chown -R varnish:varnish /etc/varnish
+  && mkdir -p /etc/varnish/source
 
+# We move the file to default.vcl.js as config volume mounts
+# to /etc/varnish/source/ would overwrite it.
+# Only custom configs are stored in /etc/varnish/source/
 COPY default.vcl.ejs /etc/varnish/default.vcl.ejs
-COPY package*.json ./src/* /app/
-RUN cd /app && npm ci
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY package*.json ./src/* /usr/local/bin/varnishconf/
+RUN cd /usr/local/bin/varnishconf && npm ci \
+  && ln -s /usr/local/bin/varnishconf/index.js /usr/local/bin/varnish \
+  && chown -R varnish:varnish /etc/varnish
 
 USER varnish
 EXPOSE 8080
 EXPOSE 2000
 EXPOSE 9131
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["/app/index.js"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD []

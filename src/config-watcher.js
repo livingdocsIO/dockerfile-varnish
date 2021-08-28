@@ -2,6 +2,7 @@
 const path = require('path')
 const dns = require('dns').promises
 const os = require('os')
+const yaml = require('js-yaml')
 const {promises: {readFile, writeFile, mkdir}, watch} = require('fs')
 const {EventEmitter} = require('events')
 const template = require('./template')
@@ -58,23 +59,41 @@ function delay (time) {
  * @prop {string} path
 */
 
+const arg = require('arg')({
+  '--config-source': String,
+  '--config-output': String,
+  '--backend': String,
+  '--storage': String,
+  '--listen': String,
+  '--config': '--config-source',
+  '-c': '--config-source',
+  // Similar options like varnishd
+  '-a': '--listen',
+  '-b': '--backend',
+  '-s': '--storage',
+}, {permissive: false, argv: process.argv.slice(2)})
+
+const configSourceDirectory = (arg['--config-source'] || '/etc/varnish/source').replace(/\/config\.(yaml|json)$/, '')
+const configOutputDirectory = path.resolve(configSourceDirectory, arg['--config-output'] || '/etc/varnish')
+
 const defaultValues = {
-  listenAddress: `0.0.0.0:${process.env.VARNISH_PORT || 8080},HTTP`,
-  adminListenAddress: `0.0.0.0:${process.env.VARNISH_ADMIN_PORT || 2000}`,
-  prometheusListenAddress: `:${process.env.PROMETHEUS_EXPORTER_PORT || 9131}`,
-  storage: `default,${process.env.VARNISH_CACHE_SIZE || '512m'}`,
+  listenAddress: arg['--listen'] || `0.0.0.0:8080,HTTP`,
+  adminListenAddress: `0.0.0.0:2000`,
+  prometheusListenAddress: `0.0.0.0:9131`,
+  storage: arg['--storage'] || `default,512m`,
   varnishRuntimeParameters: [],
-  configDirectory: '/etc/varnish',
-  adminSecretFile: '/etc/varnish/secret',
-  varnishAccessLogs: (process.env.VARNISH_ACCESS_LOG || process.env.VARNISH_ACCESS_LOGS) !== 'false',
+  adminSecretFile: path.resolve(configOutputDirectory, 'secret'),
+  varnishAccessLogs: true,
   shutdownDelay: '5s',
   adminSecret: null,
   watchFiles: true,
   watchDns: true,
-  vcl: [{name: 'default', src: 'default.vcl.ejs'}],
-  probes: (process.env.BACKEND && process.env.BACKEND_PROBE === 'true') ? [{name: 'delivery'}] : [],
+  // If you need to customize the vcl, place it in the /etc/varnish/source directory
+  // We have it in the /etc/varnish directory because it should not get
+  // overwritten by config volume mounts.
+  vcl: [{name: 'default', src: '/etc/varnish/default.vcl.ejs'}],
   acl: [{
-    name: 'purge',
+    name: 'acl_purge',
     entries: [
       '# localhost',
       'localhost',
@@ -84,20 +103,20 @@ const defaultValues = {
       '10.0.0.0/8',
       '172.16.0.0/12',
       '192.168.0.0/16',
-      ...(process.env.PURGE_IP_WHITELIST || '212.51.140.235,104.248.103.88').split(',')
+      '212.51.140.235',
+      '104.248.103.88'
     ]
   }],
   fetchRetries: 1,
-  clusters: process.env.BACKEND ? [{
+  clusters: arg['--backend'] ? [{
     name: 'delivery',
-    probe: process.env.BACKEND_PROBE === 'true' ? 'delivery' : undefined,
-    addresses: [process.env.BACKEND]
+    addresses: [arg['--backend']]
   }] : [],
   parameters: {
     feature: '+http2,+esi_disable_xml_check',
-    default_grace: toSeconds(process.env.VARNISH_CACHE_GRACE || '24h'),
-    default_keep: toSeconds(process.env.VARNISH_CACHE_KEEP || '1h'),
-    default_ttl: toSeconds(process.env.VARNISH_CACHE_TTL || '4m'),
+    default_grace: toSeconds('24h'),
+    default_keep: toSeconds('1h'),
+    default_ttl: toSeconds('4m'),
     backend_idle_timeout: 65,
     timeout_idle: 60,
     syslog_cli_traffic: 'off'
@@ -120,10 +139,10 @@ function probeDefaults (probe, i) {
 
     probe.url = assertType(probe.url || '/status', 'string', 'probe.url must be a string.')
 
-    if (!probe.interval) probe.interval = `5s`
+    if (!probe.interval) probe.interval = `10s`
     else probe.interval = `${toSeconds(probe.interval)}s`
 
-    if (!probe.timeout) probe.timeout = `4s`
+    if (!probe.timeout) probe.timeout = `${Math.max(1, Math.min(probe.interval - 1, 9))}s`
     else probe.timeout = `${toSeconds(probe.timeout)}s`
 
     probe.window = assertType(probe.window || 3, 'number', 'probe.window must be a number.')
@@ -137,10 +156,11 @@ function probeDefaults (probe, i) {
 class ConfigWatcher extends EventEmitter {
   constructor () {
     super()
-    // Change this to /etc/varnish/config.json
-    this.configFilePath = path.resolve(process.env.CONFIG_FILE || '/etc/varnish/config.json')
-    this.configDirPath = path.dirname(this.configFilePath)
-    this.configDirGeneratedPath = path.join(this.configDirPath, 'generated')
+
+    this._configFilePathYaml = path.join(configSourceDirectory, 'config.yaml')
+    this._configFilePathJson = path.join(configSourceDirectory, 'config.json')
+    this.configFilePath = this[`_configFilePath${arg['--config-source']?.endsWith('.json') ? 'Json' : 'Yaml'}`]
+
     this._config = undefined
     this._addresses = undefined
     this._resolvedAddresses = undefined
@@ -203,14 +223,23 @@ class ConfigWatcher extends EventEmitter {
     const time = Date.now()
     let fileContent, config
     try {
-      fileContent = await readFile(this.configFilePath, 'utf8')
-      this._configFilePathExists = true
+      try {
+        fileContent = await readFile(this.configFilePath, 'utf8')
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err
+
+        // Switch the file and try a reload of the other one
+        if (this.configFilePath.endsWith('.json')) this.configFilePath = this._configFilePathYaml
+        else this.configFilePath = this._configFilePathJson
+        fileContent = await readFile(this.configFilePath, 'utf8')
+      }
     } catch (err) {
+      // Always prefer the yaml file
+      this.configFilePath = this._configFilePathYaml
       if (err.code === 'ENOENT') {
         fileContent = '{}'
-        this._configFilePathExists = false
         this.emit('error', {
-          message: `Config file ${this.configFilePath} does not exist. Fallback to environment variables.`,
+          message: `Neither of config.yaml or config.json exist in ${configSourceDirectory}. Fallback to environment variables.`,
           stack: ''
         })
       } else {
@@ -219,7 +248,7 @@ class ConfigWatcher extends EventEmitter {
     }
 
     try {
-      config = JSON.parse(fileContent)
+      config = yaml.load(fileContent)
     } catch (err) {
       throw new Error(`Failed to parse config file ${this.configFilePath}: ${err.message}`)
     }
@@ -239,10 +268,10 @@ class ConfigWatcher extends EventEmitter {
 
     if (this._firstTime) {
       try {
-        await mkdir(this.configDirGeneratedPath)
+        await mkdir(configOutputDirectory)
       } catch (err) {
         if (err.code !== 'EEXIST') {
-          throw new Error(`Failed to create directory ${this.configDirGeneratedPath}: ${err.message}`)
+          throw new Error(`Failed to create directory ${configOutputDirectory}: ${err.message}`)
         }
       }
 
@@ -267,7 +296,7 @@ class ConfigWatcher extends EventEmitter {
     ;(config.probes = config.probes || []).map(probeDefaults)
 
     const acls = config.acl = config.acl || []
-    const hasPurgeAcl = acls.find((a) => a.name === 'purge')
+    const hasPurgeAcl = acls.find((a) => a.name === 'acl_purge')
     if (!hasPurgeAcl) acls.push(defaultValues.acl[0])
 
     config.xServedBy = (config.xServedBy || '{{host}}').replace(/{{\s*host(?:name)?\s*}}/, os.hostname())
@@ -277,10 +306,10 @@ class ConfigWatcher extends EventEmitter {
       if (!vcl.src || !vcl.name) throw new Error(`The config.vcl[${i}] config requires a 'name' and 'src'`)
 
       vcl.id = `${vcl.name}_${time}`
-      vcl.src = path.resolve(this.configDirPath, vcl.src)
+      vcl.src = path.resolve(configSourceDirectory, vcl.src)
       vcl.dest = vcl.dest
-        ? path.resolve(this.configDirPath, vcl.dest)
-        : path.join(this.configDirGeneratedPath, path.basename(vcl.src, '.ejs'))
+        ? path.resolve(configSourceDirectory, vcl.dest)
+        : path.join(configOutputDirectory, path.basename(vcl.src, '.ejs'))
 
       try {
         const content = await readFile(vcl.src, 'utf8')
@@ -425,7 +454,7 @@ class ConfigWatcher extends EventEmitter {
     const opts = {signal}
 
     try {
-      watch(this.configDirPath, opts, onChange).on('error', onError)
+      watch(configSourceDirectory, opts, onChange).on('error', onError)
     } catch (err) {
       onError(err)
     }
@@ -471,7 +500,6 @@ class ConfigWatcher extends EventEmitter {
 }
 
 module.exports = ConfigWatcher
-
 
 function deepFreeze (obj) {
   if (Object.isFrozen(obj)) return obj
