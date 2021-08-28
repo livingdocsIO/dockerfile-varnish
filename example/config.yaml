@@ -1,0 +1,22 @@
+listenAddress: 0.0.0.0:8080
+watchFiles: true
+watchDns: false
+clusters:
+- name: delivery
+  address: host.docker.internal:8081
+hooks:
+  # You can also use multi line strings
+  import: ""
+  global: ""
+  vclInit: ""
+  vclRecvStart: ""
+  vclRecvBackendHint: ""
+  # Uncomment this line to test hot reloads
+  vclRecvEnd: |
+    # return (synth(200, "ok"));
+
+  vclHash: ""
+  vclDeliverStart: ""
+  vclDeliverEnd: ""
+  vclSynthStart: ""
+  vclSynthEnd: ""

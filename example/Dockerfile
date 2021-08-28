@@ -1,5 +1,5 @@
-FROM node:12-alpine
-RUN apk add curl git --no-cache
+FROM node:16-alpine3.14
+RUN apk add curl git nano --no-cache
 WORKDIR /app
 COPY ./ /app
 

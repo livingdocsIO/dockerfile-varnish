@@ -29,24 +29,26 @@ const backendTemplate = ejs.compile(`
     ['firstByteTimeout', 'first_byte_timeout'],
     ['betweenBytesTimeout', 'between_bytes_timeout'],
     ['connectTimeout', 'connect_timeout']
-  ])}<% if (d.probe) { %>.probe = probe_<%= d.probe %>;<% } %>
+  ])}<% if (d.probe) { %>.probe = <%= d.probe %>;<% } %>
 }
 <% } %>
 `)
 
-const probeTemplate = ejs.compile(`probe probe_<%- d.name %> {
+const probeTemplate = ejs.compile(`probe <%- d.name %> {
   <% if (d.url) { %>.url = "<%= d.url %>";<% } %>
+  <% if (d.request) { %>.request = <% for (const l of d.request) { %> "<%= l %>"\n    <% } %>;<% } %>
   ${lines('d', [
     ['interval'],
     ['timeout'],
     ['window'],
     ['threshold'],
-    ['initial']
+    ['initial'],
+    ['expectedResponse', 'expected_response']
   ])}
 }
 `)
 
-const aclTemplate = ejs.compile(`acl acl_<%- d.name %> {
+const aclTemplate = ejs.compile(`acl <%- d.name %> {
   <% for (const a of d.entries) { %><%- normalizeAclEntryToString(a) %>\n  <% } %>
 }
 `)

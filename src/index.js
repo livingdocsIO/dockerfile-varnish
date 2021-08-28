@@ -1,5 +1,5 @@
 #!/usr/local/bin/node
-process.title = 'entrypoint'
+process.title = 'varnishconf'
 const {writeChunkToStderr} = require('./utils')
 const ConfigWatcher = require('./config-watcher')
 const configReloader = require('./config-reloader')
@@ -139,9 +139,7 @@ async function startVarnishCli () {
       args: [
         '-t', 'off',
         '-q', 'not VCL_Log:nolog',
-        '-F', '{"@timestamp":"%{%Y-%m-%dT%H:%M:%S%z}t","method":"%m","url":"%U","remote_ip":"%h","x_forwarded_for":"%{X-Forwarded-For}i","cache":"%{Varnish:handling}x","bytes":"%b","duration_usec":"%D","status":"%s","request":"%r","ttfb":"%{Varnish:time_firstbyte}x","referrer":"%{Referrer}i","user_agent":"%{User-agent}i"}',
-        // // Write to stdout of main process
-        // '-w', `/proc/${process.pid}/fd/${process.stdout.fd}`
+        '-F', '{"@timestamp":"%{%Y-%m-%dT%H:%M:%S%z}t","method":"%m","url":"%U","remote_ip":"%h","x_forwarded_for":"%{X-Forwarded-For}i","cache":"%{Varnish:handling}x","bytes":"%b","duration_usec":"%D","status":"%s","request":"%r","ttfb":"%{Varnish:time_firstbyte}x","referrer":"%{Referrer}i","user_agent":"%{User-agent}i"}'
       ]
     }).start()
   }
@@ -150,7 +148,7 @@ async function startVarnishCli () {
     processes.register({
       name: 'prometheus',
       logToStdErrWithPrefix: true,
-      command: '/bin/prometheus_varnish_exporter',
+      command: '/usr/local/bin/prometheus_varnish_exporter',
       args: ['-web.listen-address', config.prometheusListenAddress, '-raw']
     }).start()
   }
