@@ -71,6 +71,7 @@ const arg = require('arg')({
   '-a': '--listen',
   '-b': '--backend',
   '-s': '--storage',
+  '-p': [String]
 }, {permissive: false, argv: process.argv.slice(2)})
 
 const configSourceDirectory = (arg['--config-source'] || '/etc/varnish/source').replace(/\/config\.(yaml|json)$/, '')
@@ -119,7 +120,15 @@ const defaultValues = {
     default_ttl: toSeconds('4m'),
     backend_idle_timeout: 65,
     timeout_idle: 60,
-    syslog_cli_traffic: 'off'
+    syslog_cli_traffic: 'off',
+    ...(arg['-p'] || []).reduce((a, param) => {
+      const [,key, value] = /^([^=]+)=(.*)$/.exec(param) || []
+      if (value === undefined) throw new Error(`Invalid cli argument -p: ${param}`)
+      a[key] = value
+      return a
+    }, {})
+  }
+}
   }
 }
 
@@ -248,14 +257,16 @@ class ConfigWatcher extends EventEmitter {
           stack: ''
         })
       } else {
-        throw new Error(`Failed to read config file ${this.configFilePath}: ${err.message}`)
+        err.message = `Failed to read config file ${this.configFilePath}: ${err.message}`
+        throw err
       }
     }
 
     try {
       config = yaml.load(fileContent)
     } catch (err) {
-      throw new Error(`Failed to parse config file ${this.configFilePath}: ${err.message}`)
+      err.message = `Failed to parse config of file ${this.configFilePath}: ${err.message}`
+      throw err
     }
 
     // Set defaults
