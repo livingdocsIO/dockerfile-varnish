@@ -20,10 +20,20 @@ docker build -t livingdocs/varnish .
 
 ### Without config file
 
-For simplicity, there's support for a `--backend` option.
+For simplicity, there's support for the most common parameters.
+Attention, parameters in the config file always overwrite those cli parameters.
+
+`--config-source /etc/varnish/source`: The config and template directory
+`--config-output /etc/varnish`: The destination directory for the varnish vcls
+`--backend example.com`: - declares `config.clusters[0].addresses: [example.com]`
+`-p default_ttl=60`: - declares `config.parameters.default_ttl: 60`, or any other varnish param
+`--storage default,512m`: The varnish storage configuration
+`CONFIG_YAML` or `CONFIG_JSON` environment variables: Supports passing the whole config object
+
 
 ```sh
-docker run --rm -it -e BACKEND=host.docker.internal:8081 -p 8080:8080 --name varnish livingdocs/varnish --backend host.docker.internal:8081
+# For example use microcaching of requests, use a ttl of 1
+docker run --rm -it -p 8080:8080 --name varnish livingdocs/varnish --backend host.docker.internal:8081 -p default_ttl=1 -p default_grace=60
 ```
 
 ### With YAML config file
@@ -134,7 +144,7 @@ probes:
   # only this is mandatory, the rest are defaults
   # Within the vcl, we name the probe probe_delivery
   # as varnish needs unique names
-  name: probe_delivery
+- name: probe_delivery
   url: /status
   interval: 5s
   timeout: 4s
@@ -158,7 +168,7 @@ acl:
 clusters:
   # Name the cluster. The name is used in the round robin director
   # Please don't use 'backend' or 'default' here. Those are disallowed keywords.
-  name: delivery
+- name: delivery
   # One hostname
   # A round robin director gets created automatically
   # that points to all the ip addresses behind a record.
@@ -187,7 +197,7 @@ parameters:
   feature: +http2,+esi_disable_xml_check
   default_grace: 86400
   default_keep: 3600
-  default_ttl: 1
+  default_ttl: 60
   backend_idle_timeout: 65
   timeout_idle: 60
   syslog_cli_traffic: off

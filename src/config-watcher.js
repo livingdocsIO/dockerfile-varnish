@@ -117,7 +117,7 @@ const defaultValues = {
     feature: '+http2,+esi_disable_xml_check',
     default_grace: toSeconds('24h'),
     default_keep: toSeconds('1h'),
-    default_ttl: toSeconds('4m'),
+    default_ttl: toSeconds('1m'),
     backend_idle_timeout: 65,
     timeout_idle: 60,
     syslog_cli_traffic: 'off',
