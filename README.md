@@ -10,6 +10,11 @@ It includes:
 - Automatic dns reloads
 - Automatically apply varnish parameters on startup or config change
 
+How this is different than other varnish operators for Kubernetes:
+- This is no operator. Can be deployed as single deployment
+- Supports a regular docker setup, runs without kubernetes
+- Supports parameter reloading
+
 ### Build
 
 ```sh
@@ -222,23 +227,23 @@ hooks:
 
 ## Templating
 
-In the config.vcl declaration, you can configure multiple template source files,
-which should be present in in `/etc/varnish/`.
-With such a configuration:
-`{"vcl": [{"name": "something", "src": "something.vcl.ejs"}]}`
+We're using [EJS](https://ejs.co/) templates to generate the varnish vcl files.
+All the configurations should be stored in the `/etc/varnish/source` directory, which gets watched and triggers a reload on change.
 
-The file should get placed at `/etc/varnish/something.vcl.ejs`.
-On build, the file lands in `/etc/varnish/generated/something.vcl`.
+The `config.json` or `config.yaml` file, and also the vcl templates should be located in the directory `/etc/varnish/source/`. On build, the vcl files will be written into the `/etc/varnish` directory (e.g. `/etc/varnish/varnish.vcl`).
 
-We're using [EJS](https://ejs.co/) templates to generate the final varnish configuration.
-You can use any `config.*` variable in the template to generate the configuration.
+```yaml
+vcl:
+- name: varnish
+  src: varnish.vcl.ejs
+```
 
+Within a vcl template, you'll have full access to the config object.
 ```
 <%= config.something || '' %>
 ```
 
 ### Includes
-
 There are few specific includes supported:
 
 Probe:
