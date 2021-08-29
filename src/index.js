@@ -1,5 +1,19 @@
 #!/usr/local/bin/node
 process.title = 'varnishconf'
+
+function globalUncaughtException (reason) {
+  writeChunkToStderr('entrypoint', `Uncaught Exception: ${reason.message}\n  ${reason.stack}`)
+  process.exit(1)
+}
+
+function globalUnhandledRejection (reason) {
+  writeChunkToStderr('entrypoint', `Unhandled Rejection: ${reason.message}\n  ${reason.stack}`)
+  process.exit(1)
+}
+
+process.on('uncaughtException', globalUncaughtException)
+process.on('unhandledRejection', globalUnhandledRejection)
+
 const {writeChunkToStderr} = require('./utils')
 const ConfigWatcher = require('./config-watcher')
 const configReloader = require('./config-reloader')
@@ -52,9 +66,16 @@ async function startVarnishCli () {
   process.on('SIGINT', () => processes.handleShutdownSignal('SIGINT'))
   processes.on('shutdown', configWatcher.stop)
   processes.on('shutdown', hotReloadDebouncer.stop)
-  process.removeAllListeners('unhandledRejection')
+
+  process.removeListener('uncaughtException', globalUncaughtException)
+  process.removeListener('unhandledRejection', globalUnhandledRejection)
   process.on('unhandledRejection', (reason) => {
     writeChunkToStderr('entrypoint', `Unhandled Rejection: ${reason.message}\n  ${reason.stack}`)
+    processes.shutdown(1)
+  })
+
+  process.on('uncaughtException', (reason) => {
+    writeChunkToStderr('entrypoint', `Uncaught Exception: ${reason.message}\n  ${reason.stack}`)
     processes.shutdown(1)
   })
 
@@ -153,11 +174,6 @@ async function startVarnishCli () {
     }).start()
   }
 }
-
-process.on('unhandledRejection', (reason) => {
-  writeChunkToStderr('entrypoint', `Unhandled Rejection: ${reason.message}\n  ${reason.stack}`)
-  process.exit(1)
-})
 
 const cmd = process.argv.slice(2)
 if (cmd[0] === 'config') dumpConfigCli()
