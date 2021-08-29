@@ -42,6 +42,8 @@ class VarnishAdminClient extends EventEmitter {
       body = JSON.parse(body)
     } catch (err) {
       // Patch a faulty varnish vcl.list response
+      // A fix for that got merged to master already
+      // https://github.com/varnishcache/varnish-cache/issues/3677
       // $ varnishd -d -a 0.0.0.0:8080 -T 0.0.0.0:2000 -S /etc/varnish/secret
       // $ varnishadm vcl.list -j
       // body = `200 44
