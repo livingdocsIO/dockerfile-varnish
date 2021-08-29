@@ -125,28 +125,33 @@ const defaultValues = {
 
 function assertType (value, type, message) {
   if (type === 'number') {
-    if (parseInt(value) != value) throw new Error(message)
-    else value = parseInt(value)
+    const v = parseInt(value, 10)
+    if (v != value) throw new Error(`${message} Value ${JSON.stringify(value)}`)
+    return v
   }
 
-  if (typeof value !== type) throw new Error(message)
+  if ((type === 'array' && !Array.isArray(value) || typeof value !== type)) {
+    throw new Error(`${message}. Value is ${JSON.stringify(value)}`)
+  }
+
   return value
 }
 
 function probeDefaults (probe, i) {
   try {
-    if (typeof probe !== 'object') throw new Error(`must be an object.`)
+    if (typeof probe !== 'object') throw new Error(`must be an object`)
+    probe.url = assertType(probe.url || '/status', 'string', 'probe.url must be a string')
 
-    probe.url = assertType(probe.url || '/status', 'string', 'probe.url must be a string.')
+    if (probe.interval) probe.interval = `${toSeconds(probe.interval)}s`
+    if (probe.timeout) probe.timeout = `${toSeconds(probe.timeout)}s`
+    if (probe.window) assertType(probe.window, 'number', 'probe.window must be a number')
+    if (probe.threshold) assertType(probe.threshold, 'number', 'probe.threshold must be a number')
+    if (probe.expectedResponse) assertType(probe.expectedResponse, 'number', 'probe.expectedResponse must be a string')
 
-    if (!probe.interval) probe.interval = `10s`
-    else probe.interval = `${toSeconds(probe.interval)}s`
-
-    if (!probe.timeout) probe.timeout = `${Math.max(1, Math.min(probe.interval - 1, 9))}s`
-    else probe.timeout = `${toSeconds(probe.timeout)}s`
-
-    probe.window = assertType(probe.window || 3, 'number', 'probe.window must be a number.')
-    probe.threshold = assertType(probe.threshold || 2, 'number', 'probe.threshold must be a number.')
+    if (probe.request) {
+      for (const elem of assertType(probe.request, 'array', 'probe.request must be an array of strings'))
+      probe.request.map((l, i) => assertType(l, 'string', `probe.request[${i}] must be a string`))
+    }
     return probe
   } catch (err) {
     throw new Error(`The probe config in config.probes[${i}] is invalid: ${err.message}`)
