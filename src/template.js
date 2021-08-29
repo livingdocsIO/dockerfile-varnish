@@ -4,7 +4,9 @@ const ejs = require('ejs')
 function stringLines (prefix, arr) {
   let str = ''
   for (const [variable, property = variable] of arr) {
-    str += `<% if (${prefix}.${variable}) { %>.${property} = "<%= ${prefix}.${variable} %>";\n  <% } %>`
+    str += `  <%_ if (${prefix}.${variable}) { _%>\n`
+    str += `  .${property} = "<%= ${prefix}.${variable} %>";\n`
+    str += `  <%_ } _%>\n`
   }
   return str
 }
@@ -12,31 +14,31 @@ function stringLines (prefix, arr) {
 function lines (prefix, arr) {
   let str = ''
   for (const [variable, property = variable] of arr) {
-    str += `<% if (${prefix}.${variable}) { %>.${property} = <%= ${prefix}.${variable} %>;\n  <% } %>`
+    str += `  <%_ if (${prefix}.${variable}) { _%>\n`
+    str += `  .${property} = <%= ${prefix}.${variable} %>;\n`
+    str += `  <%_ } _%>\n`
   }
   return str
 }
 
-const backendTemplate = ejs.compile(`
-<% for (const address of d.addresses) { %>backend <%- address.name %> {
+const backendTemplate = ejs.compile(`<%_ for (const address of d.addresses) { %>backend <%- address.name %> {
   ${stringLines('address', [
     ['host'],
     ['port'],
     ['path']
-  ])}
-  ${lines('d', [
+  ])}  ${lines('d', [
     ['maxConnections', 'max_connections'],
     ['firstByteTimeout', 'first_byte_timeout'],
     ['betweenBytesTimeout', 'between_bytes_timeout'],
-    ['connectTimeout', 'connect_timeout']
-  ])}<% if (d.probe) { %>.probe = <%= d.probe %>;<% } %>
-}
-<% } %>
+    ['connectTimeout', 'connect_timeout'],
+    ['probe', 'probe']
+  ])}}
+<%_ } _%>
 `)
 
 const probeTemplate = ejs.compile(`probe <%- d.name %> {
   <% if (d.url) { %>.url = "<%= d.url %>";<% } %>
-  <% if (d.request) { %>.request = <% for (const l of d.request) { %> "<%= l %>"\n    <% } %>;<% } %>
+  <% if (d.request?.length) { %>.request = <% for (const l of d.request) { %> "<%= l %>"\n    <% } %>;<% } %>
   ${lines('d', [
     ['interval'],
     ['timeout'],
@@ -44,17 +46,20 @@ const probeTemplate = ejs.compile(`probe <%- d.name %> {
     ['threshold'],
     ['initial'],
     ['expectedResponse', 'expected_response']
-  ])}
-}
+  ])}}
 `)
 
 const aclTemplate = ejs.compile(`acl <%- d.name %> {
-  <% for (const a of d.entries) { %><%- normalizeAclEntryToString(a) %>\n  <% } %>
+  <%_ for (const a of d.entries) { _%>
+  <%- normalizeAclEntryToString(a) %>
+  <%_ } _%>
 }
 `)
 
 const directorTemplate = ejs.compile(`new <%- d.name %> = directors.round_robin();
-  <% for (const e of d.addresses) { %><%- d.name %>.add_backend(<%- e.name %>);<% } %>
+  <%_ for (const e of d.addresses) { _%>
+  <%- d.name %>.add_backend(<%- e.name %>);
+  <%_ } _%>
 `)
 
 function includer (file, data) {
@@ -92,10 +97,3 @@ module.exports = {
     }
   }
 }
-
-// const render = module.exports.compile(`
-// <%- include('acl', config.acl) %>
-// `)
-
-// const res = render({acl: {name: 'foo', entries: ['128.0.0.1/10']}})
-// console.log(res)
