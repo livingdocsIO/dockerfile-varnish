@@ -381,19 +381,24 @@ class ConfigWatcher extends EventEmitter {
     return deepFreeze({config, addresses})
   }
 
-  async _rawDns (addresses, retries = 1) {
+  async _rawDns (addresses, retries = 2) {
     try {
       const resolved = {}
       const promises = []
-      let tries = 0
       for (const address in addresses) {
         // Skip resolving unix sockets
         if (address.path) {
           resolved[address] = [path]
         } else {
-          promises.push(dns.resolve4(addresses[address].hostname).then((addrs) => {
-            resolved[address] = addrs
-          }))
+          const promise = dns.lookup(addresses[address].hostname, {
+            family: 4,
+            all: true,
+            verbatim: true
+          })
+            .then((res) => {
+              resolved[address] = res.map((a) => a.address)
+            })
+          promises.push(promise)
         }
       }
       await Promise.all(promises)
