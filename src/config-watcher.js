@@ -133,7 +133,7 @@ const defaultValues = {
 // Parse config from args or env variables
 if (process.env.CONFIG_YAML || process.env.CONFIG_JSON) {
   try {
-    configFromEnv = yaml.load(process.env.CONFIG_YAML || process.env.CONFIG_JSON)
+    const configFromEnv = yaml.load(process.env.CONFIG_YAML || process.env.CONFIG_JSON)
     for (const key in configFromEnv) {
       defaultValues[key] = configFromEnv[key]
     }
