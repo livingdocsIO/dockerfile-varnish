@@ -170,11 +170,6 @@ sub vcl_miss {
 }
 
 sub vcl_backend_fetch {
-  // Support custom error pages
-  if (bereq.retries > 0) {
-    if (bereq.http.host == "error") { set bereq.backend = delivery.backend(); }
-    else { set bereq.backend = delivery.backend(); }
-  }
   return (fetch);
 }
 
