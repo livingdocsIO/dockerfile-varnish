@@ -441,7 +441,7 @@ class ConfigWatcher extends EventEmitter {
 
         if (!addressObjectIsEqual(current, resolved)) {
           this._resolvedAddresses = resolved
-          this._resolvedConfig = this._toResolvedConfig(this.addresses, this._config, this._resolvedAddresses)
+          this._resolvedConfig = this._toResolvedConfig(this._addresses, this._config, this._resolvedAddresses)
           this._notifyChange(this._resolvedConfig, 'dns')
         }
       } catch (err) {
