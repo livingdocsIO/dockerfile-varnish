@@ -22,10 +22,6 @@ RUN echo 'Install utils that stay in the image' \
   && apk del varnish-deps \
   && mkdir -p /etc/varnish/source
 
-# We move the file to default.vcl.js as config volume mounts
-# to /etc/varnish/source/ would overwrite it.
-# Only custom configs are stored in /etc/varnish/source/
-COPY default.vcl.ejs /etc/varnish/default.vcl.ejs
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY package*.json ./src/* /usr/local/bin/varnishconf/
 RUN cd /usr/local/bin/varnishconf && npm ci \

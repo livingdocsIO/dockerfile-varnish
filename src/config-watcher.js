@@ -90,9 +90,9 @@ const defaultValues = {
   watchFiles: true,
   watchDns: true,
   // If you need to customize the vcl, place it in the /etc/varnish/source directory
-  // We have it in the /etc/varnish directory because it should not get
+  // We have it in the /usr/local/bin/varnishconf/ directory because it should not get
   // overwritten by config volume mounts.
-  vcl: [{name: 'default', src: '/etc/varnish/default.vcl.ejs'}],
+  vcl: [{name: 'default', src: '/usr/local/bin/varnishconf/default.vcl.ejs'}],
   acl: [{
     name: 'acl_purge',
     entries: [
