@@ -65,25 +65,33 @@ async function reloadVcl (config, withStartCommand, prefix = 'configure') {
       secret: await readFile(config.adminSecretFile, 'utf8')
     })
 
-    // Do not update the vcl if none are present
-    if (config.vcl.length) {
-      const vclBeforeLoad = (await client.request('vcl.list -j')).body.slice(3)
-        .filter((vcl) => { return vcl.status === 'active' || vcl.status === 'active'})
+    const toDiscard = []
+    for (const vcl of (await client.request('vcl.list -j')).body.slice(3)) {
+      if (vcl.status === 'active' || vcl.status === 'available') toDiscard.push(vcl.name)
+    }
 
-      // Load all the vcls first
-      for (const vcl of config.vcl) {
-        await client.request(`vcl.load ${vcl.id} ${vcl.dest}`)
-        if (!vcl.top) await client.request(`vcl.label ${vcl.name} ${vcl.id}`)
+    // Load all the vcls first
+    for (const vcl of config.vcl) {
+      // .include vcls are never loaded, only included directly in another vcl
+      if (vcl.name.endsWith('.incl') || vcl.name.endsWith('.include')) continue
+
+      const i = toDiscard.indexOf(vcl.id)
+      if (i !== -1) {
+        toDiscard.splice(i, 1)
+        continue
       }
 
-      // Then set the primary vcl to active
-      await client.request(`vcl.use ${config.vcl.find((v) => v.top).id}`)
-      for (const vcl of vclBeforeLoad) {
-        try {
-          await client.request(`vcl.discard ${vcl.name}`)
-        } catch (err) {
-          writeChunkToStderr(prefix, `Failed to discard the old vcl: ${err.message}\n${err.stack}`)
-        }
+      await client.request(`vcl.load ${vcl.id} ${vcl.dest}`)
+      if (!vcl.top) await client.request(`vcl.label ${vcl.name} ${vcl.id}`)
+    }
+
+    // Then set the primary vcl to active
+    await client.request(`vcl.use ${config.vcl.find((v) => v.top).id}`)
+    for (const vcl of toDiscard) {
+      try {
+        await client.request(`vcl.discard ${vcl}`)
+      } catch (err) {
+        writeChunkToStderr(prefix, `Failed to discard the old vcl: ${err.message}\n${err.stack}`)
       }
     }
 
@@ -96,7 +104,7 @@ async function reloadVcl (config, withStartCommand, prefix = 'configure') {
     writeChunkToStderr(prefix, `Varnish reloaded. Configuration reload completed.`)
     client.close()
   } catch (err) {
-    client.close()
+    client?.close()
     err.message = `Failed to reload config in varnish: ${err.message}`
     throw err
   }

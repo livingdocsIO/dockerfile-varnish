@@ -494,6 +494,7 @@ class ConfigWatcher extends EventEmitter {
 
   _toResolvedConfig (addresses, config, resolvedAddresses) {
     const conf = deepClone(config)
+    const now = Date.now()
     for (const c of conf.clusters) {
       const addrs = []
       for (const key of c.addresses) {
@@ -510,6 +511,11 @@ class ConfigWatcher extends EventEmitter {
       }
       c.addresses = addrs
     }
+
+    for (const v of conf.vcl) {
+      v.id = `${v.name}_${now}`
+    }
+
     return conf
   }
 
