@@ -2,6 +2,7 @@
 const path = require('path')
 const dns = require('dns').promises
 const os = require('os')
+const crypto = require('crypto')
 const yaml = require('js-yaml')
 const {promises: {readFile, writeFile, mkdir}, watch} = require('fs')
 const {EventEmitter} = require('events')
@@ -218,15 +219,15 @@ class ConfigWatcher extends EventEmitter {
     if (this._watchFilesEnabled !== config.watchFiles) {
       if (config.watchFiles) this._watchFiles()
       else this._watchFilesAbortController?.abort()
+      this._watchFilesEnabled = config.watchFiles
     }
 
     if (this._watchDnsEnabled !== config.watchDns) {
       if (config.watchDns) this._watchDns()
       else this._watchDnsAbortController?.abort()
+      this._watchDnsEnabled = config.watchDns
     }
 
-    this._watchFilesEnabled = config.watchFiles
-    this._watchDnsEnabled = config.watchDns
     this.emit('change', config, type)
   }
 
@@ -306,7 +307,7 @@ class ConfigWatcher extends EventEmitter {
         await readFile(config.adminSecretFile)
       } catch (err) {
         if (err.code === 'ENOENT') {
-          if (!config.adminSecret) config.adminSecret = require('crypto').randomBytes(36).toString('hex')
+          if (!config.adminSecret) config.adminSecret = crypto.randomBytes(36).toString('hex')
           await writeFile(config.adminSecretFile, config.adminSecret)
         } else {
           throw err
@@ -330,17 +331,18 @@ class ConfigWatcher extends EventEmitter {
     if (!config.vcl.find((v) => v.top)) config.vcl[config.vcl.length - 1].top = true
 
     config.vcl = await Promise.all(config.vcl.map(async (vcl, i) => {
-      if (!vcl.src || !vcl.name) throw new Error(`The config.vcl[${i}] config requires a 'name' and 'src'`)
+      if (!(vcl.src || (vcl.content && vcl.name))) throw new Error(`The config.vcl[${i}] config requires a 'name' and 'content' or just 'src' property`)
+      if (vcl.name) vcl.name = path.basename(vcl.name, '.vcl')
 
-      vcl.id = `${vcl.name}_${time}`
-      vcl.src = path.resolve(configSourceDirectory, vcl.src)
-      vcl.dest = vcl.dest
-        ? path.resolve(configSourceDirectory, vcl.dest)
-        : path.join(configOutputDirectory, path.basename(vcl.src, '.ejs'))
+      if (vcl.src) vcl.src = path.resolve(configSourceDirectory, vcl.src)
+      if (vcl.src && !vcl.name) vcl.name = path.basename(path.basename(vcl.src, '.ejs'), '.vcl')
+
+      if (vcl.dest) vcl.dest = path.resolve(configSourceDirectory, vcl.dest)
+      else if (vcl.name) vcl.dest = path.join(configOutputDirectory, `${vcl.name}.vcl`)
 
       try {
-        const content = await readFile(vcl.src, 'utf8')
-        vcl.render = template.compile(content)
+        if (vcl.content) vcl.render = template.compile(vcl.content)
+        else vcl.render = template.compile(await readFile(vcl.src, 'utf8'))
       } catch (err) {
         if (err.code === 'ENOENT') throw new Error(`Could not read VCL file ${vcl.src}: File does not exist`)
         throw new Error(`Could not read VCL file ${vcl.src}: ${err.message}`)
