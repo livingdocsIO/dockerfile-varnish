@@ -500,11 +500,11 @@ sub vcl_fini {
 sub bot_verification {
   if (req.http.User-Agent ~ "(?i)googlebot" && resp.http.X-Paid-Content == "true") {
     curl.set_timeout(1000);
-    var.set_string("requestUrl", "{{ getenv "BOT_VERIFICATION" }}" + "?ip=");
+    var.set_string("botVerificationUrl", "{{ getenv "BOT_VERIFICATION" }}" + "?ip=");
     if (req.http.X-Real-IP != "") {
-      var.set_string("requestUrl", var.get_string("requestUrl") + req.http.X-Real-IP);
+      var.set_string("botVerificationUrl", var.get_string("botVerificationUrl") + req.http.X-Real-IP);
     }
-    curl.get(var.get_string("requestUrl"));
+    curl.get(var.get_string("botVerificationUrl"));
     if (curl.status() > 0) {
       set req.http.verified-bot = curl.header("X-Bot-Name");
     }
