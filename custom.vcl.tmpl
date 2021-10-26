@@ -409,6 +409,10 @@ sub vcl_deliver {
   unset resp.http.Surrogate-Control;
   unset resp.http.xkey;
 
+  {{ if (getenv "BOT_VERIFICATION") }}
+    call bot_verification;
+  {{ end }}
+
   {{ if (getenv "E_METER_URL") }}{{ if (getenv "E_METER_X_TOKEN") }}
   call paywall_subroutine;
   {{ end }}{{ end }}
@@ -492,6 +496,22 @@ sub vcl_synth {
 sub vcl_fini {
   return (ok);
 }
+{{ if (getenv "BOT_VERIFICATION") }}
+sub bot_verification {
+  if (req.http.User-Agent ~ "(?i)googlebot" && resp.http.X-Paid-Content == "true") {
+    curl.set_timeout(1000);
+    var.set_string("botVerificationUrl", "{{ getenv "BOT_VERIFICATION" }}" + "?ip=");
+    if (req.http.X-Real-IP != "") {
+      var.set_string("botVerificationUrl", var.get_string("botVerificationUrl") + req.http.X-Real-IP);
+    }
+    curl.get(var.get_string("botVerificationUrl"));
+    if (curl.status() > 0) {
+      set req.http.verified-bot = curl.header("X-Bot-Name");
+    }
+    curl.free();
+  }
+}
+{{ end }}
 
 {{ if (getenv "E_METER_URL") }}{{ if (getenv "E_METER_X_TOKEN") }}
 sub paywall_subroutine {
@@ -538,6 +558,10 @@ sub paywall_subroutine {
 
       if (req.http.X-Real-IP != "") {
         var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "EndUserClientRealIp" : ""} + req.http.X-Real-IP + {"""});
+      }
+
+      if (req.http.verified-bot != "") {
+        var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "VerifiedBot" : ""} + req.http.verified-bot + {"""});
       }
 
       var.set_string("eMeterQuery", var.get_string("eMeterQuery") + " }");
