@@ -572,6 +572,13 @@ sub paywall_subroutine {
         var.set_string("eMeterAllowAccess", curl.header("AllowAccess"));
         var.set_string("eMeterLocation", curl.header("Location"));
         if (var.get_string("eMeterAllowAccess") == "false" && var.get_string("eMeterLocation") != "") {
+          if (var.get_string("eMeterLocation") ~ "pwlayout=") {
+            if (resp.http.Set-Cookie) {
+              set resp.http.Set-Cookie = resp.http.Set-Cookie + var.get_string("eMeterLocation") + "; path=/;";
+            } else {
+              set resp.http.Set-Cookie = var.get_string("eMeterLocation") + "; path=/;";
+            }
+          }
           if (var.get_string("eMeterLocation") ~ "lid=true" && req.url !~ "(\?)lid=true") {
             set req.url = regsuball(req.url, "(\?)(.*)", "");
             return (synth(751, "eMeter redirection"));
