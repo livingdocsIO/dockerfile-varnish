@@ -25,6 +25,7 @@ probe delivery_probe {
 
 {{ $BACKENDS := (split (getenv "BACKEND") ",") }}
 {{ $REMOTE_BACKENDS := (split (getenv "REMOTE_BACKEND") ",") }}
+{{ $REDIRECTS_BACKENDS := (split (getenv "REDIRECTS_BACKEND") ",") }}
 
 {{ $ERROR_PAGE := getenv "ERROR_PAGE" "" }}
 {{ $ERROR_PAGE_SEG := split $ERROR_PAGE "/" }}
@@ -78,6 +79,26 @@ backend backend_remote_{{ $backendIndex }}_{{ $ipIndex }} {
   {{ end }}
 {{ end }}
 
+{{ if (getenv "REDIRECTS_BACKEND") }}
+# redirects
+{{ range $backendIndex, $hostnameWithPort := $REDIRECTS_BACKENDS }}
+  {{- $backendredirect := (split $hostnameWithPort ":") }}
+  {{ range $ipIndex, $ip := lookupIP (index $backendredirect 0) }}
+backend backend_redirects_{{ $backendIndex }}_{{ $ipIndex }} {
+  .host = "{{ $ip }}";
+  .port = "{{ if eq 2 (len $backendredirect) }}{{ index $backendredirect 1 }}{{ else }}80{{ end }}";
+
+  .max_connections        = {{ getenv "BACKEND_MAX_CONNECTIONS" }};
+  .first_byte_timeout     = {{ getenv "BACKEND_FIRST_BYTES_TIMEOUT" }}; # How long to wait before we receive a first byte from our backend?
+  .between_bytes_timeout  = {{ getenv "BACKEND_BETWEEN_BYTES_TIMEOUT" }};  # Max time to wait for next package in an http response
+  .connect_timeout        = {{ getenv "BACKEND_CONNECT_TIMEOUT" }};  # How long to wait for a backend connection?
+  {{ if eq (getenv "BACKEND_PROBE") "true" }}.probe = delivery_probe;{{ end }}
+}
+  {{ end }}
+{{ end }}
+
+{{ end }}
+
 {{ $PURGE_IP_WHITELIST := (split (getenv "PURGE_IP_WHITELIST") ",") }}
 
 # allowed to purge
@@ -106,6 +127,16 @@ sub vcl_init {
     {{- end -}}
   {{- end }}
 
+{{ if (getenv "REDIRECTS_BACKEND") }}
+  new redirects = directors.round_robin();
+  {{- range $backendIndex, $hostnameWithPort := $REDIRECTS_BACKENDS -}}
+    {{- $backend := (split $hostnameWithPort ":") -}}
+    {{ range $ipIndex, $ip := lookupIP (index $backend 0) }}
+  redirects.add_backend(backend_redirects_{{ $backendIndex }}_{{ $ipIndex }});
+    {{- end -}}
+  {{- end }}
+{{ end }}
+
 {{ if (getenv "REMOTE_BACKEND") }}
   {{ range $backendIndex, $hostnameWithPort := $REMOTE_BACKENDS }}
   new remote_{{ $backendIndex }} = directors.round_robin();
@@ -127,6 +158,7 @@ sub can_purge {
 }
 
 sub vcl_recv {
+  {{ getenv "VARNISH_HOOK_VCL_RECV_START" "" }}
   if (!req.http.host) { set req.http.host = "" + server.ip; }
 
   if (req.url == "/favicon.ico" || req.url == "/status") {
@@ -368,6 +400,7 @@ sub vcl_backend_response {
 
 # Called before a cached/fresh object is delivered to the client.
 sub vcl_deliver {
+  {{ getenv "VARNISH_HOOK_VCL_DELIVER_START" "" }}
   // Always serve a synth response because we don't want to waste the bandwidth
   if (req.method == "PURGE") { return (synth(resp.status, "Purged")); }
 
