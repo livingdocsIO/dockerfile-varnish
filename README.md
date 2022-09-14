@@ -1,21 +1,26 @@
 # Varnish
 
-The Varnish setup we at Livingdocs currently use for the delivery.
+The Varnish setup we at Netcetera currently use for the delivery when paywall from MPP is needed. Such paywall are used in the BLZ and ASC websites.
 
 ### Build
 
 ```bash
+colima start
 docker build -t forwardpublishing/varnish-paywall .
 ```
 
 ### Run
 
 ```
-docker run --rm -it -e BACKEND=example.com:80 -p 8080:80 -p 6081:6081 --name varnish livingdocs/varnish
+docker run --rm -it -e BACKEND=example.com:80 -p 8080:80 -p 6081:6081 --name varnish forwardpublishing/varnish-paywall
 
 # test
 curl -H 'Host: example.com' localhost:8080
 ```
+
+### Deploy
+
+Each "merge to master" creates a docker image that you can use afterwards to deploy to a specific environment.
 
 ## Configuration options
 

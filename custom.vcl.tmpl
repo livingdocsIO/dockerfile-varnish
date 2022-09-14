@@ -534,7 +534,9 @@ sub bot_verification {
   if (req.http.User-Agent ~ "(?i)googlebot" && resp.http.X-Paid-Content == "true") {
     curl.set_timeout(1000);
     var.set_string("botVerificationUrl", "{{ getenv "BOT_VERIFICATION" }}" + "?ip=");
-    if (req.http.X-Real-IP != "") {
+    if (req.http.CF-Connecting-IP != "") {
+      var.set_string("botVerificationUrl", var.get_string("botVerificationUrl") + req.http.CF-Connecting-IP);
+    } else if (req.http.X-Real-IP != "") {
       var.set_string("botVerificationUrl", var.get_string("botVerificationUrl") + req.http.X-Real-IP);
     }
     curl.get(var.get_string("botVerificationUrl"));
@@ -588,7 +590,9 @@ sub paywall_subroutine {
         var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "PaywallType" : ""} + resp.http.X-Paywall-Type + {"""});
       }
 
-      if (req.http.X-Real-IP != "") {
+      if (req.http.CF-Connecting-IP != "") {
+        var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "EndUserClientRealIp" : ""} + req.http.CF-Connecting-IP + {"""});
+      } else if (req.http.X-Real-IP != "") {
         var.set_string("eMeterQuery", var.get_string("eMeterQuery") + {", "EndUserClientRealIp" : ""} + req.http.X-Real-IP + {"""});
       }
 
