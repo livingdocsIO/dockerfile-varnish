@@ -1,0 +1,28 @@
+---
+kind: pipeline
+name: default
+
+steps:
+- name: test
+  image: livingdocs/node:20
+  commands: [npm ci, npm test]
+
+- name: build
+  image: plugins/docker
+  settings:
+    dry_run: true
+    username:
+      from_secret: DOCKER_USERNAME
+    password:
+      from_secret: DOCKER_PASSWORD
+    repo: livingdocs/varnish
+    tags: [latest]
+
+trigger:
+  event: [push]
+
+---
+kind: signature
+hmac: e84815e59b8dc940d09af912d251e3d3cb9b443898f52fbbe4f4a48f06e9b7ca
+
+...
