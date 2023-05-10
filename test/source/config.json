@@ -13,7 +13,7 @@
   "clusters": [{
     "name": "delivery",
     "probe": "delivery",
-    "address": ["host.docker.internal:8081"]
+    "address": ["example.com"]
   }],
   "parameters": {
     "feature": "+http2,+esi_disable_xml_check",
