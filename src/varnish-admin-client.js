@@ -3,6 +3,9 @@ const crypto = require('crypto')
 const {EventEmitter} = require('events')
 
 class VarnishAdminClient extends EventEmitter {
+  failures = 0
+  authenticating = false
+  queue = []
   constructor (opts = {host: '127.0.0.1', port: 2000}) {
     super()
     this.opts = opts
@@ -19,18 +22,31 @@ class VarnishAdminClient extends EventEmitter {
   }
 
   async _start () {
-    try {
-      const socket = this._socket = net.createConnection({host: this.opts.host, port: this.opts.port})
-      await Promise.all([
-        new Promise((resolve, reject) => socket.on('error', reject)),
-        (async () => {
-          for await (const chunk of socket) await this._onChunk(socket, chunk)
-        })()
-      ])
-    } catch (err) {
-      if (!this._socket.destroyed) this._socket.destroy()
-      if (this._resolveCommand) this._handleResponse(500, err)
+    while (true) {
       if (this.closed) return
+
+      try {
+        if (this._socket?.destroyed === false) this._socket.destroy()
+        const socket = this._socket = net.createConnection({host: this.opts.host, port: this.opts.port})
+        await Promise.all([
+          new Promise((resolve, reject) => socket.on('error', reject)),
+          (async () => {
+            for await (const chunk of socket) await this._onChunk(socket, chunk)
+          })()
+        ])
+      } catch (err) {
+        if (this.failures !== 0) {
+          console.warn(
+            `${new Date().toISOString()} [configure]`,
+            `Failed to connect to varnish ${this.failures} times.`,
+            err
+          )
+        }
+        this.failures = this.failures + 1
+        if (this._resolveCommand) this._handleResponse(500, err)
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 300))
     }
   }
 
@@ -65,14 +81,22 @@ class VarnishAdminClient extends EventEmitter {
       this.authenticating = true
       return
     } else if (this.authenticating) {
+      this.authenticating = false
+
       if (status !== 200) {
-        const err = new Error('Authentication Failed')
-        err.status = status
-        this.emit('error', err)
+        console.warn(
+          `${new Date().toISOString()} [configure]`,
+          `Authentication against Varnish Admin Socket failed with status ${status}`
+        )
         return
+      } else {
+        console.log(
+          `${new Date().toISOString()} [configure]`,
+          'Authenticated against Varnish Admin Socket'
+        )
       }
 
-      this.authenticating = false
+      this.failures = 0
     } else if (this._resolveCommand) {
       this._handleResponse(status, body)
     }
