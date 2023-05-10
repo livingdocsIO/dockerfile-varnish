@@ -75,8 +75,8 @@ const arg = require('arg')({
   '-p': [String]
 }, {permissive: false, argv: process.argv.slice(2)})
 
-const configSourceDirectory = (arg['--config-source'] || '/etc/varnish/source').replace(/\/config\.(yaml|json)$/, '')
-const configOutputDirectory = path.resolve(configSourceDirectory, arg['--config-output'] || '/etc/varnish')
+const configSourceDirectory = (arg['--config-source'] || process.env.CONFIG_SOURCE || '/etc/varnish/source').replace(/\/config\.(yaml|json)$/, '')
+const configOutputDirectory = path.resolve(configSourceDirectory, arg['--config-output']  || process.env.CONFIG_OUTPUT || '/etc/varnish')
 
 const defaultValues = {
   listenAddress: arg['--listen'] || `0.0.0.0:8080,HTTP`,
@@ -91,8 +91,8 @@ const defaultValues = {
   watchFiles: true,
   watchDns: true,
   // If you need to customize the vcl, place it in the /etc/varnish/source directory
-  // We have it in the /usr/local/bin/varnishconf/ directory because it should not get
-  // overwritten by config volume mounts.
+  // We have the default config in /usr/local/bin/varnishconf/
+  // as it should not get overwritten by config volume mounts.
   vcl: [{name: 'default', src: '/usr/local/bin/varnishconf/default.vcl.ejs'}],
   acl: [{
     name: 'acl_purge',
@@ -265,7 +265,7 @@ class ConfigWatcher extends EventEmitter {
       if (err.code === 'ENOENT') {
         fileContent = '{}'
         this.emit('error', {
-          message: `Neither of config.yaml or config.json exist in ${configSourceDirectory}. Fallback to environment variables.`,
+          message: `Neither of config.yaml or config.json exist in '${configSourceDirectory}'. Fallback to environment variables.`,
           stack: ''
         })
       } else {

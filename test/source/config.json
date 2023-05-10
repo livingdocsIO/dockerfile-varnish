@@ -1,9 +1,7 @@
 {
   "listenAddress": "0.0.0.0:8080,HTTP",
   "adminListenAddress": "0.0.0.0:2000",
-  "adminSecret": null,
-  "adminSecretFile": "/etc/varnish/secret",
-  "vcl": [{"name": "default", "src": "../default.vcl.ejs"}],
+  "vcl": [{"name": "default", "src": "../../src/default.vcl.ejs"}],
   "probes": [{
     "name": "delivery",
     "url": "/status",
