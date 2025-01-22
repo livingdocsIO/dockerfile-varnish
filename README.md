@@ -17,8 +17,34 @@ How this is different than other varnish operators for Kubernetes:
 
 ### Build
 
+For multi arch builds on Docker we use buildx. You have to create a builder before being able to build the containers.
+```
+docker buildx create --name container --driver=docker-container container
+```
+
+The following functions are used to build and push images on x86 machines:
+```
+buildcontainer () { docker buildx build --no-cache --platform linux/amd64,linux/arm64  "$@" }
+pushcontainer () { for var in "$@"; do docker push "$var"; done }
+```
+
+On Apple Silicon Macs, you have to upload the images to a registry that supports multi-arch images in one step.
+
+```
+buildcontainer () { docker buildx build --no-cache --push --platform linux/amd64,linux/arm64  "$@" }
+```
+
+With Lima
+```
+lima sudo systemctl start containerd
+lima sudo nerdctl run --privileged --rm tonistiigi/binfmt:qemu-v8.1.5 --install all
+
+buildcontainer () { nerdctl build --platform=amd64,arm64 "$@" }
+pushcontainer () { for var in "$@"; do nerdctl push --all-platforms "$var"; done }
+```
+
 ```sh
-docker build -t livingdocs/varnish .
+buildcontainer -t livingdocs/varnish .
 ```
 
 ### Run
@@ -38,7 +64,7 @@ Attention, parameters in the config file always overwrite those cli parameters.
 
 ```sh
 # For example use microcaching of requests, use a ttl of 1
-docker run --rm -it -p 8080:8080 --name varnish livingdocs/varnish --backend host.docker.internal:8081 -p default_ttl=1 -p default_grace=60
+docker run --rm -it -p 8080:8080 --name varnish livingdocs/varnish --backend example.com:80 -p default_ttl=1 -p default_grace=60
 ```
 
 ### With YAML config file
